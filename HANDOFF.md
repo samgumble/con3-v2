@@ -193,8 +193,11 @@ octile, binary heap, no corner-cutting). `spatial-hash.ts` = neighbor queries.
 - **rts-camera.ts** — pan (WASD/edge), zoom (wheel), yaw (Q/E), `focusOn(x,z)`,
   `shake(amount)` (decaying screen-shake, e.g. lightning). Pan derives from the
   camera's ground axes (correct at every yaw).
-- **unit-models.ts** — merged vertex-colored low-poly geometry per kind (hi-vis
-  worker, CAT-yellow excavator, mobile crane). Swap point for real glTF.
+- **unit-models.ts** — merged vertex-colored low-poly geometry per kind, detailed
+  (worker: hard hat+crest, hi-vis vest w/ reflective braces, arms+hands, boots;
+  excavator: glazed cab, rams, bucket teeth, beacon; crane: telescoping boom,
+  outriggers, winch, beacon). One `InstancedMesh` per kind; ~700 tris each. Swap
+  point for real glTF.
 - **building-models.ts** — `buildBuildingMesh` → `buildFinished` (each support
   building has its own detailed mesh: trailer=stacked cabins, depot=open canopy +
   material stacks, permitOffice=columned civic block, workshop=gable garage,
@@ -292,6 +295,16 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- Unit model polish (unit-models.ts). Workers gained arms + skin hands, split
+  legs + boots, a tool belt, hi-vis reflective braces (the white ‖ on the vest)
+  and a proper hard hat with a crest. Excavators gained a glazed cab, hydraulic
+  rams, bucket teeth, an exhaust stack, road wheels and an amber beacon. Cranes
+  gained a glazed windscreen, a two-segment telescoping boom, a winch drum, a
+  counterweight, outrigger legs/pads, wheel hubs and a beacon. Still one merged
+  geometry per kind (single InstancedMesh); lightweight (~704/416/748 tris) and
+  dimensions kept ≈constant so on-screen sizes don't shift. Verified visually +
+  triangle counts; the M1 Pro renders crowds fine (preview's 1fps was background
+  rAF throttling, not load).
 - Stockpile delivery/consumption priority (trailer → depot lifecycle). Gatherers
   now **deliver to a depot** with room ahead of the field office (`nearestDrop`
   in harvest.ts — `depot` kind scored first, full ones overflow), while ALL
