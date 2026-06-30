@@ -62,6 +62,14 @@ export class RtsCamera {
     this.apply();
   }
 
+  /** Current ground point the camera is looking at. */
+  get focusX(): number {
+    return this.target.x;
+  }
+  get focusZ(): number {
+    return this.target.z;
+  }
+
   /** Advance camera from input. Call once per rendered frame. */
   update(dt: number, pointer?: { x: number; y: number; w: number; h: number }): void {
     let fx = 0;

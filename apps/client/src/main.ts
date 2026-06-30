@@ -31,6 +31,8 @@ view.onTick(sim.snapshot()); // seed visuals before first frame
 const selected = new Set<Entity>();
 // Most recent unit snapshot (refreshed each sim tick), reused by the HUD.
 let lastSnapshot = sim.snapshot();
+// Active hazard kind, tracked so we only switch weather FX on change.
+let lastHazardKind: string | null = null;
 
 const selBox = document.createElement("div");
 selBox.id = "selbox";
@@ -382,6 +384,11 @@ function updateHud(): void {
       `<span class="hz-timer">${hz.timeLeft}s</span>`;
   } else {
     hazardBanner.classList.add("hidden");
+  }
+  const hzKind = hz ? hz.kind : null;
+  if (hzKind !== lastHazardKind) {
+    view.setWeather(hzKind);
+    lastHazardKind = hzKind;
   }
   statUnits.textContent = String(sim.world.query("Unit").length);
   statIdle.textContent = String(sim.idleWorkers().length);

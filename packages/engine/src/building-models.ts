@@ -142,10 +142,38 @@ export function buildBuildingMesh(kind: string, radius: number, progress: number
     : buildUnderConstruction(kind, radius, progress);
 }
 
+/** A fixed tower crane that stands beside the HQ during construction. */
+function buildTowerCrane(): THREE.Group {
+  const g = new THREE.Group();
+  g.name = "towerCrane";
+  const mastH = 12.5;
+  g.add(box(1.3, 0.5, 1.3, STEEL, 0, 0.25, 0)); // ballast base
+  // Lattice mast (segments for a built-up look).
+  const segs = 6;
+  for (let i = 0; i < segs; i++) {
+    const y = 0.5 + (i + 0.5) * (mastH / segs);
+    g.add(box(0.42, mastH / segs - 0.12, 0.42, YELLOW, 0, y, 0));
+  }
+  const topY = 0.5 + mastH;
+  g.add(box(0.78, 0.7, 0.78, YELLOW, 0, topY + 0.1, 0)); // slewing unit
+  g.add(box(0.55, 0.5, 0.6, 0x2b3340, 0.1, topY + 0.55, 0.45)); // operator cab
+  // Working jib reaching out +X over the building, with an A-frame apex.
+  g.add(box(8.2, 0.22, 0.34, YELLOW, 3.6, topY + 0.6, 0));
+  g.add(box(0.2, 1.5, 0.2, YELLOW, 0, topY + 1.35, 0)); // apex post
+  // Counter-jib + counterweight (−X).
+  g.add(box(2.6, 0.22, 0.34, YELLOW, -1.5, topY + 0.6, 0));
+  g.add(box(0.9, 1.0, 0.9, 0x33373b, -2.7, topY + 0.35, 0)); // counterweight
+  // Trolley hook line + block over the building.
+  g.add(box(0.05, 3.2, 0.05, 0x33373b, 6.0, topY - 1.0, 0));
+  g.add(box(0.32, 0.34, 0.32, 0x33373b, 6.0, topY - 2.7, 0));
+  return g;
+}
+
 /**
  * The HQ megaproject, rendered at its current construction phase (0..12). It
  * grows from a cleared lot through excavation, foundation, a rising clad tower,
- * and finally a topped-out building with a sign.
+ * and finally a topped-out building with a sign. A tower crane stands alongside
+ * while it's under construction.
  */
 export function buildMegaprojectMesh(phase: number, radius: number): THREE.Group {
   const g = new THREE.Group();
@@ -222,6 +250,13 @@ export function buildMegaprojectMesh(phase: number, radius: number): THREE.Group
   if (phase >= 12) {
     g.add(box(0.2, 1.5, 0.2, STEEL, 0, topY + 0.95, 0)); // spire
     g.add(box(W * 0.7, 0.55, 0.1, YELLOW, 0, topY - 0.5, W * 0.52)); // rooftop sign
+  }
+
+  // Tower crane stands alongside while under construction (gone at handover).
+  if (phase >= 1 && phase < 12) {
+    const crane = buildTowerCrane();
+    crane.position.set(-(radius + 1.1), 0, radius * 0.2);
+    g.add(crane);
   }
   return g;
 }

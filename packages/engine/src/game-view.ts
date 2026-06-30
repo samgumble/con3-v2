@@ -1,4 +1,8 @@
 import * as THREE from "three";
+import { EffectComposer } from "three/examples/jsm/postprocessing/EffectComposer.js";
+import { RenderPass } from "three/examples/jsm/postprocessing/RenderPass.js";
+import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPass.js";
+import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RtsCamera } from "./rts-camera";
 import { buildUnitGeometries } from "./unit-models";
 import { buildBuildingMesh, buildDepositMesh, buildMegaprojectMesh } from "./building-models";
@@ -51,6 +55,7 @@ interface BuildingVisual {
   group: THREE.Group;
   ring: THREE.Mesh;
   stageKey: string;
+  crane?: THREE.Object3D; // the HQ tower crane (slews while animating)
 }
 
 interface NodeVisual {
@@ -74,6 +79,8 @@ interface UnitVisual {
 
 /** Max instances allocated per InstancedMesh. Plenty for an RTS skirmish. */
 const UNIT_CAP = 2048;
+
+const WHITE = new THREE.Color(0xffffff);
 
 /** Small deterministic RNG so obstacle decoration is stable across reloads. */
 function mulberry32(seed: number): () => number {
@@ -105,13 +112,25 @@ export class GameView {
   private ghost: { group: THREE.Group; mats: THREE.MeshStandardMaterial[] } | null = null;
   private readonly markers: { mesh: THREE.Mesh; age: number; ttl: number }[] = [];
 
+  // Lighting refs + weather/hazard FX.
+  private sun!: THREE.DirectionalLight;
+  private hemi!: THREE.HemisphereLight;
+  private ambient!: THREE.AmbientLight;
+  private rain: THREE.LineSegments | null = null;
+  private weather: "clear" | "rain" | "osha" | "shortage" | "strike" = "clear";
+  private readonly weatherSky = new THREE.Color(0xaab7c2);
+  private lightningTimer = 4;
+  private flash = 0;
+  private composer!: EffectComposer;
+  private elapsed = 0; // animation clock
+
   private readonly raycaster = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
 
   // Reusable scratch objects to avoid per-frame allocation.
   private readonly m4 = new THREE.Matrix4();
   private readonly quat = new THREE.Quaternion();
-  private readonly up = new THREE.Vector3(0, 1, 0);
+  private readonly euler = new THREE.Euler();
   private readonly pos = new THREE.Vector3();
   private readonly unitScale = new THREE.Vector3(1, 1, 1);
   private readonly ringScale = new THREE.Vector3(1, 1, 1);
@@ -125,6 +144,8 @@ export class GameView {
     this.renderer.setSize(w, h);
     this.renderer.shadowMap.enabled = true;
     this.renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    this.renderer.toneMapping = THREE.ACESFilmicToneMapping;
+    this.renderer.toneMappingExposure = 1.05;
     container.appendChild(this.renderer.domElement);
 
     this.cameraCtl = new RtsCamera(w / h, this.renderer.domElement);
@@ -139,27 +160,136 @@ export class GameView {
     this.buildUnitMeshes();
     this.ringMesh = this.buildRingMesh();
 
+    // Post-processing: filmic tone mapping + a soft bloom so the sun, hi-vis
+    // equipment, and lightning glow.
+    this.composer = new EffectComposer(this.renderer);
+    this.composer.addPass(new RenderPass(this.scene, this.cameraCtl.camera));
+    this.composer.addPass(
+      new UnrealBloomPass(new THREE.Vector2(w, h), 0.42, 0.55, 0.82),
+    );
+    this.composer.addPass(new OutputPass());
+
     window.addEventListener("resize", () => this.resize());
   }
 
   private buildLighting(): void {
-    const hemi = new THREE.HemisphereLight(0xdfeaf5, 0x7a6b54, 0.9);
-    this.scene.add(hemi);
-    this.scene.add(new THREE.AmbientLight(0xffffff, 0.12));
+    this.hemi = new THREE.HemisphereLight(0xdfeaf5, 0x7a6b54, 0.9);
+    this.scene.add(this.hemi);
+    this.ambient = new THREE.AmbientLight(0xffffff, 0.12);
+    this.scene.add(this.ambient);
 
-    const sun = new THREE.DirectionalLight(0xfff4e0, 1.35);
-    sun.position.set(48, 66, 28);
-    sun.castShadow = true;
-    sun.shadow.mapSize.set(2048, 2048);
+    this.sun = new THREE.DirectionalLight(0xfff4e0, 1.5);
+    this.sun.position.set(48, 66, 28);
+    this.sun.castShadow = true;
+    this.sun.shadow.mapSize.set(2048, 2048);
     const s = 72;
-    sun.shadow.camera.left = -s;
-    sun.shadow.camera.right = s;
-    sun.shadow.camera.top = s;
-    sun.shadow.camera.bottom = -s;
-    sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 220;
-    sun.shadow.bias = -0.0004;
-    this.scene.add(sun);
+    this.sun.shadow.camera.left = -s;
+    this.sun.shadow.camera.right = s;
+    this.sun.shadow.camera.top = s;
+    this.sun.shadow.camera.bottom = -s;
+    this.sun.shadow.camera.near = 1;
+    this.sun.shadow.camera.far = 220;
+    this.sun.shadow.bias = -0.0004;
+    this.sun.shadow.radius = 3;
+    this.scene.add(this.sun);
+  }
+
+  private buildRain(): void {
+    const N = 3500;
+    const AREA = 55;
+    const TOP = 30;
+    const arr = new Float32Array(N * 6);
+    for (let i = 0; i < N; i++) {
+      const x = (Math.random() - 0.5) * 2 * AREA;
+      const z = (Math.random() - 0.5) * 2 * AREA;
+      const y = Math.random() * TOP;
+      arr[i * 6] = x;
+      arr[i * 6 + 1] = y;
+      arr[i * 6 + 2] = z;
+      arr[i * 6 + 3] = x - 0.18;
+      arr[i * 6 + 4] = y - 0.75;
+      arr[i * 6 + 5] = z;
+    }
+    const geo = new THREE.BufferGeometry();
+    geo.setAttribute("position", new THREE.BufferAttribute(arr, 3));
+    const mat = new THREE.LineBasicMaterial({ color: 0xbcccd9, transparent: true, opacity: 0.42 });
+    this.rain = new THREE.LineSegments(geo, mat);
+    this.rain.frustumCulled = false;
+    this.rain.visible = false;
+    this.scene.add(this.rain);
+  }
+
+  /** Switch the active hazard's weather/atmosphere (null = clear). */
+  setWeather(kind: string | null): void {
+    const w = (kind ?? "clear") as GameView["weather"];
+    this.weather = w === "rain" || w === "osha" || w === "shortage" || w === "strike" ? w : "clear";
+
+    // Distinct sky/lighting per hazard.
+    const presets: Record<string, { sky: number; sun: number; hemi: number; near: number; far: number }> = {
+      clear: { sky: 0xaab7c2, sun: 1.5, hemi: 0.9, near: 95, far: 215 },
+      rain: { sky: 0x596169, sun: 0.5, hemi: 0.6, near: 55, far: 150 },
+      osha: { sky: 0x9fb2c6, sun: 1.2, hemi: 0.95, near: 90, far: 210 },
+      shortage: { sky: 0xb7a47a, sun: 1.35, hemi: 0.85, near: 48, far: 135 },
+      strike: { sky: 0x96999a, sun: 1.0, hemi: 0.75, near: 80, far: 200 },
+    };
+    const p = presets[this.weather];
+    this.weatherSky.setHex(p.sky);
+    (this.scene.background as THREE.Color).copy(this.weatherSky);
+    const fog = this.scene.fog as THREE.Fog;
+    fog.color.copy(this.weatherSky);
+    fog.near = p.near;
+    fog.far = p.far;
+    this.sun.intensity = p.sun;
+    this.hemi.intensity = p.hemi;
+
+    if (this.weather === "rain") {
+      if (!this.rain) this.buildRain();
+      this.rain!.visible = true;
+      this.lightningTimer = 1.5 + Math.random() * 2;
+    } else if (this.rain) {
+      this.rain.visible = false;
+    }
+  }
+
+  private updateWeather(dt: number): void {
+    if (this.weather !== "rain" || !this.rain) return;
+
+    // Animate the rain streaks falling (with a little wind slant) + recycle.
+    const pos = this.rain.geometry.getAttribute("position") as THREE.BufferAttribute;
+    const arr = pos.array as Float32Array;
+    const fall = 30 * dt;
+    const slant = 2.5 * dt;
+    for (let i = 0; i < arr.length; i += 6) {
+      arr[i + 1] -= fall;
+      arr[i + 4] -= fall;
+      arr[i] += slant;
+      arr[i + 3] += slant;
+      if (arr[i + 1] < 0) {
+        const nx = (Math.random() - 0.5) * 110;
+        const nz = (Math.random() - 0.5) * 110;
+        const ny = 30 + Math.random() * 6;
+        arr[i] = nx;
+        arr[i + 1] = ny;
+        arr[i + 2] = nz;
+        arr[i + 3] = nx - 0.18;
+        arr[i + 4] = ny - 0.75;
+        arr[i + 5] = nz;
+      }
+    }
+    pos.needsUpdate = true;
+    this.rain.position.set(this.cameraCtl.focusX, 0, this.cameraCtl.focusZ);
+
+    // Lightning: occasional bright flash that lights the whole scene.
+    this.lightningTimer -= dt;
+    if (this.lightningTimer <= 0) {
+      this.flash = Math.random() < 0.35 ? 1.5 : 1.0; // sometimes a double-bright bolt
+      this.lightningTimer = 2.5 + Math.random() * 5.5;
+    }
+    this.flash = Math.max(0, this.flash - dt * 6);
+    const f = Math.min(1, this.flash);
+    (this.scene.background as THREE.Color).copy(this.weatherSky).lerp(WHITE, f * 0.85);
+    this.hemi.intensity = 0.6 + f * 1.6;
+    this.ambient.intensity = 0.12 + f * 0.8;
   }
 
   private buildGround(): void {
@@ -324,7 +454,7 @@ export class GameView {
         group.position.set(b.x, 0, b.z);
         group.rotation.y = b.rot;
         this.scene.add(group);
-        v = { group, ring, stageKey };
+        v = { group, ring, stageKey, crane: group.getObjectByName("towerCrane") ?? undefined };
         this.buildings.set(b.id, v);
       } else {
         v.group.position.set(b.x, 0, b.z);
@@ -491,22 +621,31 @@ export class GameView {
     pointer?: { x: number; y: number; w: number; h: number },
   ): void {
     this.cameraCtl.update(dt, pointer);
+    this.elapsed += dt;
     this.updateMarkers(dt);
+    this.updateWeather(dt);
 
     const counters = new Map<string, number>();
     for (const kind of this.kindMeshes.keys()) counters.set(kind, 0);
     let ringCount = 0;
 
-    for (const v of this.visuals.values()) {
+    for (const [id, v] of this.visuals) {
       const x = v.prevX + (v.curX - v.prevX) * alpha;
       const z = v.prevZ + (v.curZ - v.prevZ) * alpha;
       const rot = lerpAngle(v.prevRot, v.curRot, alpha);
+      const moving = Math.abs(v.curX - v.prevX) + Math.abs(v.curZ - v.prevZ) > 0.005;
 
       const mesh = this.kindMeshes.get(v.kind);
       if (mesh) {
         const idx = counters.get(v.kind)!;
-        this.quat.setFromAxisAngle(this.up, rot);
-        this.pos.set(x, 0, z);
+        // Liveliness: walkers bounce, vehicles jostle, everything idle-sways.
+        const amp = v.kind === "worker" ? 0.07 : 0.03;
+        const bob = moving
+          ? Math.abs(Math.sin(this.elapsed * 9 + id * 1.7)) * amp
+          : Math.sin(this.elapsed * 1.6 + id) * 0.012;
+        const tilt = moving ? Math.sin(this.elapsed * 9 + id * 1.7) * 0.04 : 0;
+        this.quat.setFromEuler(this.euler.set(tilt, rot, 0));
+        this.pos.set(x, bob, z);
         this.m4.compose(this.pos, this.quat, this.unitScale);
         mesh.setMatrixAt(idx, this.m4);
         counters.set(v.kind, idx + 1);
@@ -528,7 +667,12 @@ export class GameView {
     this.ringMesh.count = ringCount;
     this.ringMesh.instanceMatrix.needsUpdate = true;
 
-    this.renderer.render(this.scene, this.cameraCtl.camera);
+    // Tower cranes slowly slew while the HQ is under construction.
+    for (const bv of this.buildings.values()) {
+      if (bv.crane) bv.crane.rotation.y = this.elapsed * 0.12;
+    }
+
+    this.composer.render();
   }
 
   /** Ground point under a screen pixel, or null if it misses the plane. */
@@ -560,6 +704,7 @@ export class GameView {
     const w = this.container.clientWidth;
     const h = this.container.clientHeight;
     this.renderer.setSize(w, h);
+    this.composer.setSize(w, h);
     this.cameraCtl.setAspect(w / h);
   }
 }
