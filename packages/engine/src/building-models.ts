@@ -73,6 +73,17 @@ function buildFinished(kind: string, r: number): THREE.Group {
       g.add(box(r * 1.1, 0.6, r * 1.1, YELLOW, 0, 0.3, 0)); // stacked materials
       break;
     }
+    case "fieldOffice": {
+      // Wide site trailer with blue trim, a porch, and a sign board.
+      g.add(box(r * 2.1, 1.0, r * 1.2, WHITE, 0, 0.65, 0));
+      g.add(box(r * 2.15, 0.16, r * 1.25, BLUE, 0, 1.2, 0)); // roof trim
+      g.add(box(r * 2.12, 0.22, r * 1.22, BLUE, 0, 0.5, 0)); // side stripe
+      g.add(box(r * 1.9, 0.25, r * 1.0, DARK, 0, 0.2, 0)); // chassis
+      g.add(box(0.7, 0.9, 0.12, DARK, r * 0.5, 0.6, r * 0.61)); // door
+      g.add(box(0.12, 1.3, 0.12, DARK, -r * 0.9, 0.65, r * 0.8)); // sign post
+      g.add(box(1.1, 0.55, 0.08, YELLOW, -r * 0.9, 1.25, r * 0.85)); // sign board
+      break;
+    }
     case "permitOffice": {
       // Civic tower: tall narrow office with a blue roof + a sign board.
       g.add(box(r * 1.4, 2.8, r * 1.4, WHITE, 0, 1.4, 0));
@@ -129,6 +140,90 @@ export function buildBuildingMesh(kind: string, radius: number, progress: number
   return progress >= 1
     ? buildFinished(kind, radius)
     : buildUnderConstruction(kind, radius, progress);
+}
+
+/**
+ * The HQ megaproject, rendered at its current construction phase (0..12). It
+ * grows from a cleared lot through excavation, foundation, a rising clad tower,
+ * and finally a topped-out building with a sign.
+ */
+export function buildMegaprojectMesh(phase: number, radius: number): THREE.Group {
+  const g = new THREE.Group();
+  const W = radius * 1.45; // tower footprint
+  g.add(box(radius * 1.95, 0.3, radius * 1.95, CONCRETE, 0, 0.15, 0)); // site pad
+
+  // Ground works (phases 0–2): pit + survey stakes / piles.
+  if (phase <= 2) {
+    if (phase >= 1) g.add(box(W, 0.28, W, 0x2a2622, 0, 0.18, 0)); // excavation pit
+    const piles = phase >= 2;
+    const n = piles ? 9 : 4;
+    const ph = piles ? 1.5 : 0.6;
+    const col = piles ? STEEL : YELLOW;
+    for (let i = 0; i < n; i++) {
+      const ax = ((i % 3) - 1) * W * 0.34;
+      const az = (Math.floor(i / 3) - 1) * W * 0.34;
+      g.add(box(0.13, ph, 0.13, col, ax, ph / 2 + 0.25, az));
+    }
+    return g;
+  }
+
+  // Foundation slab (phase ≥ 3).
+  g.add(box(W * 1.05, 0.4, W * 1.05, CONCRETE, 0, 0.45, 0));
+  if (phase === 3) return g;
+
+  // Substructure perimeter walls (phase ≥ 4).
+  if (phase >= 4) {
+    g.add(box(W, 0.9, 0.2, STEEL, 0, 0.9, W / 2));
+    g.add(box(W, 0.9, 0.2, STEEL, 0, 0.9, -W / 2));
+    g.add(box(0.2, 0.9, W, STEEL, W / 2, 0.9, 0));
+    g.add(box(0.2, 0.9, W, STEEL, -W / 2, 0.9, 0));
+  }
+  if (phase === 4) return g;
+
+  // Real construction flow: the full structural frame tops out FIRST, then
+  // floor slabs, then glass/cladding is installed bottom-to-top — never glass
+  // ahead of structure.
+  const FLOORS = 7;
+  const FH = 1.4;
+  const baseY = 0.65;
+  const c = W * 0.45;
+  const topY = baseY + FLOORS * FH;
+
+  // Superstructure (phase ≥ 5): full-height structural columns top out.
+  if (phase >= 5) {
+    for (let f = 0; f < FLOORS; f++) {
+      const y = baseY + f * FH;
+      for (const cx of [-c, c]) for (const cz of [-c, c]) g.add(box(0.2, FH, 0.2, STEEL, cx, y + FH / 2, cz));
+    }
+  }
+
+  // Floor slabs (phase ≥ 6): decks poured at every level.
+  if (phase >= 6) {
+    for (let f = 0; f < FLOORS; f++) g.add(box(W, 0.16, W, CONCRETE, 0, baseY + f * FH, 0));
+  }
+
+  // Cladding climbs the finished frame: lower half during Façade (7), full by
+  // Roofing (8); windows light up brighter at Fit-out (10+).
+  const cladColor = phase >= 10 ? 0x9cc4ec : 0x6fa8d8;
+  const cladFloors = phase >= 8 ? FLOORS : phase === 7 ? Math.ceil(FLOORS / 2) : 0;
+  for (let f = 0; f < cladFloors; f++) {
+    const y = baseY + f * FH + FH / 2;
+    g.add(box(W * 0.95, FH * 0.9, 0.08, cladColor, 0, y, W / 2));
+    g.add(box(W * 0.95, FH * 0.9, 0.08, cladColor, 0, y, -W / 2));
+    g.add(box(0.08, FH * 0.9, W * 0.95, cladColor, W / 2, y, 0));
+    g.add(box(0.08, FH * 0.9, W * 0.95, cladColor, -W / 2, y, 0));
+  }
+
+  if (phase >= 8) g.add(box(W * 1.05, 0.24, W * 1.05, DARK, 0, topY + 0.1, 0)); // roof
+  if (phase >= 9) {
+    g.add(box(0.8, 0.5, 0.8, STEEL, W * 0.2, topY + 0.45, W * 0.2)); // rooftop MEP
+    g.add(box(0.6, 0.4, 0.6, STEEL, -W * 0.25, topY + 0.4, -W * 0.1));
+  }
+  if (phase >= 12) {
+    g.add(box(0.2, 1.5, 0.2, STEEL, 0, topY + 0.95, 0)); // spire
+    g.add(box(W * 0.7, 0.55, 0.1, YELLOW, 0, topY - 0.5, W * 0.52)); // rooftop sign
+  }
+  return g;
 }
 
 /** A material deposit mound, scaled by how much remains. */

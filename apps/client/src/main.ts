@@ -138,13 +138,15 @@ canvas.addEventListener("mousedown", (e) => {
     selBox.style.display = "block";
     updateSelBox(e.clientX, e.clientY);
   } else if (e.button === 2) {
-    // Right-click: build an in-progress site, gather a deposit, or move.
+    // Right-click: work the HQ, build an in-progress site, gather, or move.
     const p = view.worldFromScreen(e.clientX, e.clientY);
     if (p && selected.size > 0) {
       const bld = sim.buildingAt(p.x, p.z);
       const node = sim.nodeAt(p.x, p.z);
-      if (bld && sim.assignBuild(selected, bld)) {
-        // assigned to construct
+      if (bld && bld === sim.hqEntity()) {
+        sim.assignMegaBuild(selected); // send crews to the megaproject
+      } else if (bld && sim.assignBuild(selected, bld)) {
+        // assigned to construct a support building
       } else if (node) {
         sim.assignHarvest(selected, node);
       } else {
@@ -241,9 +243,45 @@ const resLabor = document.getElementById("res-labor")!;
 const resPermits = document.getElementById("res-permits")!;
 const resLicense = document.getElementById("res-license")!;
 const hazardBanner = document.getElementById("hazardbanner")!;
+const megaPhaseNum = document.getElementById("mega-phasenum")!;
+const megaPhaseName = document.getElementById("mega-phasename")!;
+const megaMat = document.getElementById("mega-mat")!;
+const megaEff = document.getElementById("mega-eff")!;
+const megaOverall = document.getElementById("mega-overall")!;
+const megaPct = document.getElementById("mega-pct")!;
+const megaHint = document.getElementById("mega-hint")!;
+const victory = document.getElementById("victory")!;
+const victoryStats = document.getElementById("victory-stats")!;
+document.getElementById("victory-restart")!.addEventListener("click", () => location.reload());
+
+const pct = (v: number) => `${Math.max(0, Math.min(100, v * 100))}%`;
 
 function updateHud(): void {
   const eco = sim.economy;
+
+  // Megaproject phase tracker.
+  const mp = sim.megaprojectStatus();
+  if (mp) {
+    megaPhaseNum.textContent = mp.complete
+      ? `Phase ${mp.totalPhases}/${mp.totalPhases}`
+      : `Phase ${mp.phaseIndex + 1}/${mp.totalPhases}`;
+    megaPhaseName.textContent = mp.phaseName;
+    megaMat.style.width = pct(mp.materials / mp.materialsReq);
+    megaEff.style.width = pct(mp.effort / mp.effortReq);
+    megaOverall.style.width = pct(mp.overall);
+    megaPct.textContent = `${Math.round(mp.overall * 100)}%`;
+    megaHint.textContent = mp.complete
+      ? "Headquarters complete!"
+      : mp.crews > 0
+        ? `${mp.crews} crew on site`
+        : "Right-click the HQ with workers to build";
+  }
+
+  // Victory.
+  if (sim.won && victory.classList.contains("hidden")) {
+    victory.classList.remove("hidden");
+    victoryStats.textContent = `Headquarters completed in ${Math.floor(sim.tick / 20)}s`;
+  }
 
   const hz = sim.hazardStatus();
   if (hz) {

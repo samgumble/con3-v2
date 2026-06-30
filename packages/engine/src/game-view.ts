@@ -1,7 +1,7 @@
 import * as THREE from "three";
 import { RtsCamera } from "./rts-camera";
 import { buildUnitGeometries } from "./unit-models";
-import { buildBuildingMesh, buildDepositMesh } from "./building-models";
+import { buildBuildingMesh, buildDepositMesh, buildMegaprojectMesh } from "./building-models";
 
 /** Minimal render description of a unit (decoupled from the sim package). */
 export interface RenderUnit {
@@ -32,6 +32,8 @@ export interface RenderBuilding {
   radius: number;
   progress: number; // 0..1, 1 = complete
   selected: boolean;
+  /** For the HQ megaproject: current phase (0..totalPhases). */
+  megaPhase?: number;
 }
 
 /** Render description of a resource deposit. */
@@ -266,12 +268,18 @@ export class GameView {
     const seen = new Set<number>();
     for (const b of list) {
       seen.add(b.id);
-      const stageKey =
-        b.progress >= 1 ? `${b.kind}:done` : `${b.kind}:${Math.floor(b.progress * 3)}`;
+      const isMega = b.megaPhase !== undefined;
+      const stageKey = isMega
+        ? `mega:${b.megaPhase}`
+        : b.progress >= 1
+          ? `${b.kind}:done`
+          : `${b.kind}:${Math.floor(b.progress * 3)}`;
       let v = this.buildings.get(b.id);
       if (!v || v.stageKey !== stageKey) {
         if (v) this.scene.remove(v.group);
-        const group = buildBuildingMesh(b.kind, b.radius, b.progress);
+        const group = isMega
+          ? buildMegaprojectMesh(b.megaPhase!, b.radius)
+          : buildBuildingMesh(b.kind, b.radius, b.progress);
         const ring = new THREE.Mesh(
           new THREE.RingGeometry(b.radius * 1.05, b.radius * 1.3, 28),
           new THREE.MeshBasicMaterial({

@@ -8,6 +8,8 @@ import {
   type Construction,
   type Economy,
   type Harvester,
+  type MegaBuilder,
+  type MegaProject,
   type Obstacle,
   type Owner,
   type PathFollow,
@@ -24,6 +26,7 @@ import { movementSystem } from "./systems/movement";
 import { separationSystem } from "./systems/avoidance";
 import { harvestSystem } from "./systems/harvest";
 import { constructionSystem } from "./systems/construction";
+import { megaprojectSystem, type PhaseDef } from "./systems/megaproject";
 
 /** Fixed simulation rate. The renderer interpolates between ticks. */
 export const TICK_RATE = 20;
@@ -48,13 +51,32 @@ export interface BuildingDef {
 }
 
 export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
-  hq: { radius: 2.6, buildTime: 0, costFunds: 0, costMaterials: 0, dropOff: true, providesLabor: 20, trains: ["worker"], tier: 0, permitsPerSec: 0 },
+  // The HQ is the central megaproject (built phase-by-phase), not an operations
+  // building — it has no drop-off/training; the Field Office covers those.
+  hq: { radius: 3.6, buildTime: 0, costFunds: 0, costMaterials: 0, dropOff: false, providesLabor: 0, trains: [], tier: 0, permitsPerSec: 0 },
+  fieldOffice: { radius: 2.2, buildTime: 0, costFunds: 0, costMaterials: 0, dropOff: true, providesLabor: 20, trains: ["worker"], tier: 0, permitsPerSec: 0 },
   trailer: { radius: 1.7, buildTime: 8, costFunds: 0, costMaterials: 60, dropOff: false, providesLabor: 8, trains: [], tier: 0, permitsPerSec: 0 },
   depot: { radius: 1.9, buildTime: 8, costFunds: 0, costMaterials: 80, dropOff: true, providesLabor: 0, trains: [], tier: 0, permitsPerSec: 0 },
   permitOffice: { radius: 2.0, buildTime: 10, costFunds: 100, costMaterials: 80, dropOff: false, providesLabor: 0, trains: [], tier: 0, permitsPerSec: 0.7 },
   workshop: { radius: 2.2, buildTime: 12, costFunds: 120, costMaterials: 120, dropOff: false, providesLabor: 0, trains: ["excavator"], tier: 1, permitsPerSec: 0 },
   craneYard: { radius: 2.4, buildTime: 16, costFunds: 220, costMaterials: 200, dropOff: false, providesLabor: 0, trains: ["crane"], tier: 2, permitsPerSec: 0 },
 };
+
+/** The HQ megaproject's construction phases (advanced by materials + effort). */
+export const PHASES: PhaseDef[] = [
+  { name: "Site Prep", materials: 20, effort: 6 },
+  { name: "Excavation", materials: 30, effort: 8 },
+  { name: "Piling", materials: 45, effort: 10 },
+  { name: "Foundation", materials: 60, effort: 12 },
+  { name: "Substructure", materials: 75, effort: 14 },
+  { name: "Superstructure", materials: 95, effort: 18 },
+  { name: "Floor Slabs", materials: 110, effort: 20 },
+  { name: "Façade & Cladding", materials: 120, effort: 20 },
+  { name: "Roofing", materials: 90, effort: 16 },
+  { name: "MEP & Services", materials: 80, effort: 18 },
+  { name: "Interior Fit-out", materials: 70, effort: 16 },
+  { name: "Inspection & Handover", materials: 40, effort: 12 },
+];
 
 export interface UnitDef {
   costFunds: number;
@@ -145,6 +167,8 @@ export class GameSim {
     tier: 0,
   };
   tick = 0;
+  /** Set true when the megaproject (HQ) is fully built. */
+  won = false;
 
   // Hazard state.
   private mods: Mods = defaultMods();
@@ -154,8 +178,27 @@ export class GameSim {
 
   constructor() {
     this.spawnObstacles();
-    this.spawnBuilding("hq", 0, 16, true);
+    this.spawnBuilding("fieldOffice", -14, 17, true); // operations base
+    this.spawnMegaproject(0, 16); // the HQ — the win objective
     this.spawnDeposits();
+  }
+
+  /** Place the central HQ megaproject at phase 0. */
+  spawnMegaproject(x: number, z: number): Entity {
+    const def = BUILDINGS.hq;
+    const e = this.world.create();
+    this.world.add<Transform>(e, C.Transform, { x, z, rot: 0 });
+    this.world.add<Owner>(e, C.Owner, { player: 0 });
+    this.world.add<Building>(e, C.Building, { kind: "hq", radius: def.radius });
+    this.world.add<Selectable>(e, C.Selectable, { selected: false });
+    this.world.add<MegaProject>(e, C.MegaProject, {
+      phaseIndex: 0,
+      phaseMaterials: 0,
+      phaseEffort: 0,
+      complete: false,
+    });
+    this.grid.blockCircle(x, z, def.radius);
+    return e;
   }
 
   private spawnObstacles(): void {
@@ -484,6 +527,64 @@ export class GameSim {
     return any;
   }
 
+  /** Assign units to work the central megaproject (the HQ). */
+  assignMegaBuild(entities: Iterable<Entity>): boolean {
+    let any = false;
+    for (const e of entities) {
+      const u = this.world.get<Unit>(e, C.Unit);
+      if (!u || !HARVEST_KINDS.has(u.kind)) continue;
+      this.world.remove(e, C.Harvester);
+      this.world.remove(e, C.Builder);
+      this.world.remove(e, C.PathFollow);
+      this.world.add<MegaBuilder>(e, C.MegaBuilder, {});
+      any = true;
+    }
+    return any;
+  }
+
+  /** The HQ entity (megaproject), or 0. */
+  hqEntity(): Entity {
+    for (const e of this.world.query(C.MegaProject)) return e;
+    return 0;
+  }
+
+  /** Megaproject status for the HUD. */
+  megaprojectStatus(): {
+    phaseIndex: number;
+    totalPhases: number;
+    phaseName: string;
+    materials: number;
+    materialsReq: number;
+    effort: number;
+    effortReq: number;
+    overall: number;
+    crews: number;
+    complete: boolean;
+  } | null {
+    const hq = this.hqEntity();
+    if (!hq) return null;
+    const mp = this.world.get<MegaProject>(hq, C.MegaProject)!;
+    const done = mp.complete;
+    const phase = done ? PHASES[PHASES.length - 1] : PHASES[mp.phaseIndex];
+    const phaseFrac = done
+      ? 1
+      : Math.min(mp.phaseMaterials / phase.materials, mp.phaseEffort / phase.effort);
+    let crews = 0;
+    for (const e of this.world.query(C.MegaBuilder)) crews += this.world.isAlive(e) ? 1 : 0;
+    return {
+      phaseIndex: done ? PHASES.length : mp.phaseIndex,
+      totalPhases: PHASES.length,
+      phaseName: done ? "Complete" : phase.name,
+      materials: Math.floor(mp.phaseMaterials),
+      materialsReq: phase.materials,
+      effort: Math.floor(mp.phaseEffort),
+      effortReq: phase.effort,
+      overall: (mp.phaseIndex + (done ? 0 : phaseFrac)) / PHASES.length,
+      crews,
+      complete: done,
+    };
+  }
+
   setSelected(entities: Set<Entity>): void {
     for (const e of this.world.query(C.Selectable)) {
       this.world.get<Selectable>(e, C.Selectable)!.selected = entities.has(e);
@@ -529,6 +630,11 @@ export class GameSim {
       (e) => this.completeBuilding(e),
       this.mods.buildAllowed,
     );
+    if (this.mods.buildAllowed) {
+      megaprojectSystem(this.world, this.grid, this.economy, PHASES, TICK_DT, () => {
+        this.won = true;
+      });
+    }
     this.advanceProduction(TICK_DT);
 
     // Permits trickle in from a base rate plus completed Permit Offices.
@@ -574,6 +680,7 @@ export class GameSim {
       const b = this.world.get<Building>(e, C.Building)!;
       const c = this.world.get<Construction>(e, C.Construction);
       const s = this.world.get<Selectable>(e, C.Selectable);
+      const mp = this.world.get<MegaProject>(e, C.MegaProject);
       out.push({
         id: e,
         x: t.x,
@@ -583,6 +690,8 @@ export class GameSim {
         radius: b.radius,
         progress: c ? c.progress : 1,
         selected: s?.selected ?? false,
+        megaPhase: mp ? (mp.complete ? PHASES.length : mp.phaseIndex) : undefined,
+        megaTotal: mp ? PHASES.length : undefined,
       });
     }
     return out;
@@ -620,6 +729,9 @@ export interface BuildingSnapshot {
   radius: number;
   progress: number;
   selected: boolean;
+  /** For the HQ megaproject: current phase index (0..totalPhases). */
+  megaPhase?: number;
+  megaTotal?: number;
 }
 
 export interface NodeSnapshot {

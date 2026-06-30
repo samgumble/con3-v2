@@ -18,6 +18,35 @@
 
     <div id="hazardbanner" class="hidden"></div>
 
+    <div id="megapanel">
+      <div class="mega-title">🏗 MAIN BUILDING</div>
+      <div class="mega-phase">
+        <span id="mega-phasenum">Phase 1/12</span> · <b id="mega-phasename">Site Prep</b>
+      </div>
+      <div class="mega-bar">
+        <span class="mb-label">Materials</span>
+        <div class="mb-track"><i id="mega-mat" class="mat"></i></div>
+      </div>
+      <div class="mega-bar">
+        <span class="mb-label">Effort</span>
+        <div class="mb-track"><i id="mega-eff" class="eff"></i></div>
+      </div>
+      <div class="mega-overall">
+        <div class="mo-track"><i id="mega-overall"></i></div>
+        <span id="mega-pct">0%</span>
+      </div>
+      <div class="mega-hint" id="mega-hint">Right-click the HQ with workers to build</div>
+    </div>
+
+    <div id="victory" class="hidden">
+      <div class="victory-card">
+        <div class="victory-title">🏆 PROJECT COMPLETE</div>
+        <div class="victory-sub">The headquarters is built. Well done, Commander.</div>
+        <div class="victory-stats" id="victory-stats"></div>
+        <button id="victory-restart">Build Another →</button>
+      </div>
+    </div>
+
     <div id="hud">
       <div class="hud-title">CON<span>3</span> <small>— Phase 2 · economy</small></div>
       <div class="hud-stats">

@@ -68,6 +68,7 @@ export interface Owner {
 
 export type BuildingKind =
   | "hq"
+  | "fieldOffice"
   | "trailer"
   | "depot"
   | "permitOffice"
@@ -116,6 +117,26 @@ export interface Builder {
   targetId: number; // building entity under construction
 }
 
+/**
+ * The central megaproject (the HQ). Advances through many construction phases;
+ * completing the last one wins the game. Each phase consumes delivered
+ * materials and accumulated worker effort.
+ */
+export interface MegaProject {
+  phaseIndex: number;
+  /** Materials delivered toward the current phase. */
+  phaseMaterials: number;
+  /** Worker-seconds accumulated on the current phase. */
+  phaseEffort: number;
+  /** True once the final phase completes. */
+  complete: boolean;
+}
+
+/** Tags a unit as working the megaproject (delivers materials + effort). */
+export interface MegaBuilder {
+  empty?: never;
+}
+
 /** A building that trains units from a queue. */
 export interface Producer {
   /** Unit kinds this building can train. */
@@ -151,4 +172,6 @@ export const C = {
   Harvester: "Harvester",
   Builder: "Builder",
   Producer: "Producer",
+  MegaProject: "MegaProject",
+  MegaBuilder: "MegaBuilder",
 } as const;
