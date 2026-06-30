@@ -1,0 +1,14 @@
+# Netlify deploy config for the Con3 client.
+# pnpm monorepo: install at root, build only the client, publish its dist.
+[build]
+  command = "corepack enable && pnpm install --frozen-lockfile=false && pnpm --filter @con3/client build"
+  publish = "apps/client/dist"
+
+[build.environment]
+  NODE_VERSION = "20"
+
+# SPA fallback (single HTML entry).
+[[redirects]]
+  from = "/*"
+  to = "/index.html"
+  status = 200
