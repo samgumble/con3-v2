@@ -189,10 +189,18 @@ octile, binary heap, no corner-cutting). `spatial-hash.ts` = neighbor queries.
   building has its own detailed mesh: trailer=stacked cabins, depot=open canopy +
   material stacks, permitOffice=columned civic block, workshop=gable garage,
   craneYard=lattice tower crane) / `buildUnderConstruction` (slab+scaffold),
-  `buildMegaprojectMesh(phase,radius)` (the HQ; **real construction flow** —
-  frame tops out first, then slabs, then glass climbs bottom-to-top, then roof/
-  spire; `buildTowerCrane()` present phases 1–11), `buildDepositMesh` (aggregate
-  stockpile in a timber bay).
+  `buildMegaprojectMesh(phase, frac, radius)` (the HQ — a 14-storey tower built
+  **floor-by-floor** from phase + sub-phase fraction: `megaBuildState()` maps
+  (phase,frac)→discrete state [structFloors/slabFloors/glazedFloors/litFloors/
+  coreFloors + roof/parapet/crown/spire flags + active-floor flags]; structure
+  rises in phase 5, decks lag a few floors, glass climbs in phase 7 — never ahead
+  of frame; `megaStageKey()` is the per-storey rebuild key. `buildClimbingCrane`
+  climbs with the work; external hoist + safety screens while live. **`mergeStatic()`
+  collapses the ~350 boxes into ~14 merged meshes by colour (one draw call each)
+  so it stays cheap — crane + translucent screens kept separate/animatable.**),
+  `buildDepositMesh` (aggregate stockpile in a timber bay). The HQ snapshot now
+  carries `megaFrac` (0..1 within the phase); syncBuildings disposes old groups
+  (`disposeGroup`) on rebuild.
 - **site-decor.ts** — cosmetic: perimeter fence + gate + site sign, traffic cones
   (tapered white band), jersey barriers, pallets, pipes, skip, port-a-loos, and
   two exhaust-puffing generators (the smoke sources). No collision.
@@ -273,6 +281,15 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- HQ built floor-by-floor + 10× detail. `buildMegaprojectMesh(phase, frac,
+  radius)` now renders a 14-storey tower one storey at a time from the sub-phase
+  fraction (new `megaFrac` on the building snapshot): steel frame rises (phase 5),
+  decks lag, curtain wall climbs bottom-up (phase 7, always behind the frame),
+  with a central core, ring beams, mullions/spandrels, an active rebar+formwork
+  floor, a glazing cradle floor, rooftop plant, spire, climbing crane, external
+  hoist and safety screens. Perf: `mergeStatic()` merges the ~350 boxes into ~14
+  meshes by colour → fps held at 121 (was 28 unmerged); `disposeGroup()` frees old
+  HQ groups on rebuild. (Verified at phases 5/7/12 + crane still slews.)
 - Build/Train palette now explains WHY each greyed item is locked (user-adoption
   ask). Each button shows an inline amber reason line: `buildBlockReason` /
   `trainBlockReason` in main.ts compute the single most relevant blocker — tier

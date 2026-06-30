@@ -806,6 +806,14 @@ export class GameSim {
         selected: s?.selected ?? false,
         megaPhase: mp ? (mp.complete ? PHASES.length : mp.phaseIndex) : undefined,
         megaTotal: mp ? PHASES.length : undefined,
+        megaFrac: mp
+          ? mp.complete
+            ? 1
+            : Math.min(
+                mp.phaseMaterials / PHASES[mp.phaseIndex].materials,
+                mp.phaseEffort / PHASES[mp.phaseIndex].effort,
+              )
+          : undefined,
       });
     }
     return out;
@@ -847,6 +855,8 @@ export interface BuildingSnapshot {
   /** For the HQ megaproject: current phase index (0..totalPhases). */
   megaPhase?: number;
   megaTotal?: number;
+  /** Progress within the current phase (0..1) — drives floor-by-floor visuals. */
+  megaFrac?: number;
 }
 
 export interface NodeSnapshot {

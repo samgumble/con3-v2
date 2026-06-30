@@ -5,7 +5,7 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RtsCamera } from "./rts-camera";
 import { buildUnitGeometries } from "./unit-models";
-import { buildBuildingMesh, buildDepositMesh, buildMegaprojectMesh } from "./building-models";
+import { buildBuildingMesh, buildDepositMesh, buildMegaprojectMesh, megaStageKey } from "./building-models";
 import { buildSiteDecor } from "./site-decor";
 import { ParticleFX } from "./particles";
 
@@ -44,6 +44,8 @@ export interface RenderBuilding {
   selected: boolean;
   /** For the HQ megaproject: current phase (0..totalPhases). */
   megaPhase?: number;
+  /** Progress within the current phase (0..1) — drives floor-by-floor visuals. */
+  megaFrac?: number;
 }
 
 /** Render description of a resource deposit. */
@@ -98,6 +100,17 @@ function mulberry32(seed: number): () => number {
     t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
     return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
   };
+}
+
+/** Free the GPU resources of a discarded mesh group (geometries + materials). */
+function disposeGroup(obj: THREE.Object3D): void {
+  obj.traverse((o) => {
+    const mesh = o as THREE.Mesh;
+    if (mesh.geometry) mesh.geometry.dispose();
+    const mat = mesh.material;
+    if (Array.isArray(mat)) for (const m of mat) m.dispose();
+    else if (mat) (mat as THREE.Material).dispose();
+  });
 }
 
 /**
@@ -491,7 +504,7 @@ export class GameView {
       const isMega = b.megaPhase !== undefined;
       if (isMega) this.hqPos = (this.hqPos ?? new THREE.Vector3()).set(b.x, 0, b.z);
       const stageKey = isMega
-        ? `mega:${b.megaPhase}`
+        ? `mega:${megaStageKey(b.megaPhase!, b.megaFrac ?? 0)}`
         : b.progress >= 1
           ? `${b.kind}:done`
           : `${b.kind}:${Math.floor(b.progress * 3)}`;
@@ -502,12 +515,13 @@ export class GameView {
           this.dust.burst(b.x, 1.2, b.z, isMega ? 34 : 16, 2.8, 2.4, 1.1, 0.9, 0.86, 0.78, 1.1);
           if (isMega) this.sparks.burst(b.x, 2.5, b.z, 26, 4.5, 5, 0.28, 1.0, 0.82, 0.32, 0.7);
           this.scene.remove(v.group);
+          disposeGroup(v.group);
         } else if (this.buildingsInit && !isMega) {
           // A freshly-placed building blueprint kicks up a dust puff.
           this.dust.burst(b.x, 0.6, b.z, 22, b.radius + 1, 1.6, 1.1, 0.9, 0.86, 0.78, 1.0);
         }
         const group = isMega
-          ? buildMegaprojectMesh(b.megaPhase!, b.radius)
+          ? buildMegaprojectMesh(b.megaPhase!, b.megaFrac ?? 0, b.radius)
           : buildBuildingMesh(b.kind, b.radius, b.progress);
         const ring = new THREE.Mesh(
           new THREE.RingGeometry(b.radius * 1.05, b.radius * 1.3, 28),
@@ -535,6 +549,7 @@ export class GameView {
     for (const [id, v] of this.buildings) {
       if (!seen.has(id)) {
         this.scene.remove(v.group);
+        disposeGroup(v.group);
         this.buildings.delete(id);
       }
     }
