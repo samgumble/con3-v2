@@ -405,9 +405,9 @@ body,
   position: relative;
   overflow: hidden;
   display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 14px;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 3px;
   min-width: 178px;
   padding: 8px 11px;
   border: 2px solid var(--edge);
@@ -439,12 +439,31 @@ body,
     inset 0 0 0 1px var(--cat-yellow),
     inset 0 -3px 5px rgba(0, 0, 0, 0.45);
 }
-.build-btn.dim { opacity: 0.42; }
-.build-btn.locked { cursor: not-allowed; }
-.build-btn.locked .name::before {
-  content: "🔒 ";
-  font-size: 11px;
+/* name + cost share the top row; the reason line sits below it. */
+.build-btn .brow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
 }
+/* Dim only the name/cost when unavailable so the reason stays readable. */
+.build-btn.dim .brow { opacity: 0.4; }
+.build-btn.locked { cursor: not-allowed; }
+.build-btn.blocked {
+  background: linear-gradient(#3a3c41, #26282c 55%, #1f2124);
+}
+/* Inline "why is this greyed out?" reason. */
+.build-btn .req {
+  display: none;
+  font-family: var(--font-disp);
+  font-weight: 600;
+  font-size: 10.5px;
+  text-transform: none;
+  letter-spacing: 0.2px;
+  line-height: 1.2;
+  color: var(--amber);
+}
+.build-btn.blocked .req { display: block; }
 .build-btn .cost {
   font-family: var(--font-led);
   font-size: 12px;

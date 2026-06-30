@@ -273,6 +273,14 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- Build/Train palette now explains WHY each greyed item is locked (user-adoption
+  ask). Each button shows an inline amber reason line: `buildBlockReason` /
+  `trainBlockReason` in main.ts compute the single most relevant blocker — tier
+  (`🔒 Needs <License> license`), missing producer building (`🏗 Build a Crane
+  Yard first` — train buttons now also check the producer exists, which they
+  didn't before), storage-cap too small for the cost (`📦 Build a Depot first`),
+  funds, materials, or labour. Button restyled to a column (name/cost row +
+  `.req` line); only the name/cost dims so the reason stays readable.
 - Navigation upgrade (player: units get stuck / bad at walking around each other).
   movement.ts rewritten with **predictive** neighbour avoidance (closest-point-of-
   approach steering using a start-of-tick velocity snapshot — kept deterministic),

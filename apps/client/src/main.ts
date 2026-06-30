@@ -4,6 +4,7 @@ import {
   BUILDINGS,
   type BuildingKind,
   GameSim,
+  LICENSE_TIERS,
   TICK_DT,
   UNITS,
   type Entity,
@@ -62,6 +63,7 @@ function labelOf(kind: string): string {
 const BUILDABLE: BuildingKind[] = ["trailer", "depot", "permitOffice", "workshop", "craneYard"];
 let buildMode: BuildingKind | null = null;
 const buildBtns = new Map<BuildingKind, HTMLButtonElement>();
+const buildReq = new Map<BuildingKind, HTMLElement>();
 
 const buildBtnsEl = document.querySelector("#buildbar .build-btns")!;
 for (const kind of BUILDABLE) {
@@ -71,10 +73,13 @@ for (const kind of BUILDABLE) {
   const cost: string[] = [];
   if (def.costFunds) cost.push(`<span class="f">${def.costFunds}</span>`);
   if (def.costMaterials) cost.push(`<b>${def.costMaterials}</b>`);
-  btn.innerHTML = `<span class="name">${labelOf(kind)}</span><span class="cost">${cost.join(" ")}</span>`;
+  btn.innerHTML =
+    `<span class="brow"><span class="name">${labelOf(kind)}</span><span class="cost">${cost.join(" ")}</span></span>` +
+    `<span class="req"></span>`;
   btn.addEventListener("click", () => toggleBuild(kind));
   buildBtnsEl.appendChild(btn);
   buildBtns.set(kind, btn);
+  buildReq.set(kind, btn.querySelector(".req") as HTMLElement);
 }
 
 function toggleBuild(kind: BuildingKind): void {
@@ -96,15 +101,19 @@ function exitBuild(): void {
 
 // --- Train (unit production) ---------------------------------------------
 const TRAINABLE: UnitKind[] = ["worker", "excavator", "crane"];
-const trainBtns = new Map<UnitKind, { btn: HTMLButtonElement; q: HTMLElement; prog: HTMLElement }>();
+const trainBtns = new Map<
+  UnitKind,
+  { btn: HTMLButtonElement; q: HTMLElement; prog: HTMLElement; req: HTMLElement }
+>();
 const trainBtnsEl = document.querySelector("#buildbar .train-btns")!;
 for (const kind of TRAINABLE) {
   const def = UNITS[kind];
   const btn = document.createElement("button");
   btn.className = "build-btn";
   btn.innerHTML =
-    `<span class="name">${labelOf(kind)} <span class="q"></span></span>` +
-    `<span class="cost"><span class="f">${def.costFunds}</span></span>` +
+    `<span class="brow"><span class="name">${labelOf(kind)} <span class="q"></span></span>` +
+    `<span class="cost"><span class="f">${def.costFunds}</span></span></span>` +
+    `<span class="req"></span>` +
     `<div class="progbar"><i></i></div>`;
   btn.addEventListener("click", () => sim.trainUnit(kind));
   trainBtnsEl.appendChild(btn);
@@ -112,7 +121,44 @@ for (const kind of TRAINABLE) {
     btn,
     q: btn.querySelector(".q") as HTMLElement,
     prog: btn.querySelector(".progbar i") as HTMLElement,
+    req: btn.querySelector(".req") as HTMLElement,
   });
+}
+
+// --- "Why is this greyed out?" --------------------------------------------
+// Compute the single most relevant blocking reason for a palette item so the
+// HUD can show it inline — a big help for new players (e.g. a Crane button
+// explaining it needs a Crane Yard, not just sitting there dimmed).
+function licenseFor(tier: number): string {
+  return LICENSE_TIERS[tier]?.name ?? "a higher";
+}
+/** The building kind that trains a given unit (e.g. crane → craneYard). */
+function producerKindFor(unit: UnitKind): BuildingKind | null {
+  for (const bk of Object.keys(BUILDINGS) as BuildingKind[]) {
+    if (BUILDINGS[bk].trains.includes(unit)) return bk;
+  }
+  return null;
+}
+/** Why a building can't be placed right now, or "" if it can. */
+function buildBlockReason(kind: BuildingKind): string {
+  const def = BUILDINGS[kind];
+  const eco = sim.economy;
+  if (!sim.buildingUnlocked(kind)) return `🔒 Needs ${licenseFor(def.tier)} license`;
+  if (def.costMaterials > eco.materialsCap) return "📦 Build a Depot first (storage too small)";
+  if (eco.funds < def.costFunds) return "💰 Not enough funds";
+  if (eco.materials < def.costMaterials) return "🧱 Not enough materials";
+  return "";
+}
+/** Why a unit can't be trained right now, or "" if it can. */
+function trainBlockReason(kind: UnitKind, builtKinds: Set<string>): string {
+  const def = UNITS[kind];
+  const eco = sim.economy;
+  if (!sim.unitUnlocked(kind)) return `🔒 Needs ${licenseFor(def.tier)} license`;
+  const pk = producerKindFor(kind);
+  if (pk && !builtKinds.has(pk)) return `🏗 Build a ${labelOf(pk)} first`;
+  if (eco.funds < def.costFunds) return "💰 Not enough funds";
+  if (eco.laborUsed >= eco.laborCap) return "👷 Labour full — build a Trailer";
+  return "";
 }
 
 // --- Upgrade license ------------------------------------------------------
@@ -450,23 +496,33 @@ function updateHud(): void {
     upgradeBtn.className = canUp ? "upgrade-btn" : "upgrade-btn dim";
   }
 
-  // Build buttons: lock by tier, dim by affordability.
+  // Which producer buildings exist (completed) — used to explain locked units.
+  const builtKinds = new Set(
+    sim.buildingSnapshot().filter((b) => b.progress >= 1).map((b) => b.kind),
+  );
+
+  // Build buttons: grey by tier/affordability, and show WHY inline.
   for (const [kind, btn] of buildBtns) {
     const locked = !sim.buildingUnlocked(kind);
+    const reason = buildBlockReason(kind);
     btn.classList.toggle("locked", locked);
     btn.classList.toggle("dim", locked || !sim.affordable(kind));
+    btn.classList.toggle("blocked", reason !== "");
+    buildReq.get(kind)!.textContent = reason;
+    btn.title = reason || `Build a ${labelOf(kind)}`;
   }
 
-  // Train buttons: queue + progress, lock by tier, dim by cost/labor.
+  // Train buttons: queue + progress, plus an inline reason when greyed.
   for (const [kind, ui] of trainBtns) {
     const st = sim.productionStatus(kind);
     ui.q.textContent = st.queue > 0 ? `(${st.queue})` : "";
     ui.prog.style.width = `${st.progress * 100}%`;
-    const locked = !sim.unitUnlocked(kind);
-    const ok =
-      !locked && eco.funds >= UNITS[kind].costFunds && eco.laborUsed < eco.laborCap;
-    ui.btn.classList.toggle("locked", locked);
-    ui.btn.classList.toggle("dim", !ok);
+    const reason = trainBlockReason(kind, builtKinds);
+    ui.btn.classList.toggle("locked", !sim.unitUnlocked(kind));
+    ui.btn.classList.toggle("dim", reason !== "");
+    ui.btn.classList.toggle("blocked", reason !== "");
+    ui.req.textContent = reason;
+    ui.btn.title = reason || `Train a ${labelOf(kind)}`;
   }
 }
 

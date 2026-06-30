@@ -134,6 +134,12 @@ with the **Upgrade License** button (bottom-right), paying Funds + Permits.
 You need to reach at least **Industrial** to finish the HQ, because the tall
 phases require a crane. Plan your permits early so you're not blocked later.
 
+> **Greyed-out buttons tell you why.** Any locked Train/Build button shows the
+> exact reason beneath it — e.g. a **Crane** says *"Build a Crane Yard first"*, a
+> **Crane Yard** says *"Build a Depot first (storage too small)"*, and others say
+> *"Needs Commercial license"*, *"Not enough materials"*, or *"Not enough funds"*.
+> Follow the chain and you'll always know your next step.
+
 ---
 
 ## 🏗️ The 12 HQ phases
