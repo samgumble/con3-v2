@@ -63,7 +63,13 @@ export interface Owner {
   player: number;
 }
 
-export type BuildingKind = "hq" | "trailer" | "depot" | "workshop";
+export type BuildingKind =
+  | "hq"
+  | "trailer"
+  | "depot"
+  | "permitOffice"
+  | "workshop"
+  | "craneYard";
 
 /** A placed structure. Footprint radius is used for collision + placement. */
 export interface Building {
@@ -117,12 +123,16 @@ export interface Producer {
   progress: number;
 }
 
-/** Player resource pools. */
+/** Player resource pools and tech state. */
 export interface Economy {
   funds: number;
   materials: number;
   laborUsed: number;
   laborCap: number;
+  /** Tech-gate currency earned over time / from Permit Offices. */
+  permits: number;
+  /** License tier index: 0 Residential, 1 Commercial, 2 Industrial, 3 Skyscraper. */
+  tier: number;
 }
 
 export const C = {

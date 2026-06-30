@@ -7,6 +7,7 @@ import {
   TICK_DT,
   UNITS,
   type Entity,
+  type UnitKind,
 } from "@con3/sim";
 
 const app = document.getElementById("app")!;
@@ -49,8 +50,12 @@ let pointerInside = false;
 const canvas = view.renderer.domElement;
 const CLICK_THRESHOLD = 6; // px — below this a drag counts as a click
 
+function labelOf(kind: string): string {
+  return kind.replace(/([A-Z])/g, " $1").replace(/^./, (c) => c.toUpperCase());
+}
+
 // --- Build mode -----------------------------------------------------------
-const BUILDABLE: BuildingKind[] = ["trailer", "depot", "workshop"];
+const BUILDABLE: BuildingKind[] = ["trailer", "depot", "permitOffice", "workshop", "craneYard"];
 let buildMode: BuildingKind | null = null;
 const buildBtns = new Map<BuildingKind, HTMLButtonElement>();
 
@@ -62,14 +67,14 @@ for (const kind of BUILDABLE) {
   const cost: string[] = [];
   if (def.costFunds) cost.push(`<span class="f">${def.costFunds}</span>`);
   if (def.costMaterials) cost.push(`<b>${def.costMaterials}</b>`);
-  const name = kind[0].toUpperCase() + kind.slice(1);
-  btn.innerHTML = `<span>${name}</span><span class="cost">${cost.join(" ")}</span>`;
+  btn.innerHTML = `<span class="name">${labelOf(kind)}</span><span class="cost">${cost.join(" ")}</span>`;
   btn.addEventListener("click", () => toggleBuild(kind));
   buildBtnsEl.appendChild(btn);
   buildBtns.set(kind, btn);
 }
 
 function toggleBuild(kind: BuildingKind): void {
+  if (!sim.buildingUnlocked(kind)) return; // gated by license tier
   if (buildMode === kind) {
     exitBuild();
     return;
@@ -86,18 +91,29 @@ function exitBuild(): void {
 }
 
 // --- Train (unit production) ---------------------------------------------
+const TRAINABLE: UnitKind[] = ["worker", "excavator", "crane"];
+const trainBtns = new Map<UnitKind, { btn: HTMLButtonElement; q: HTMLElement; prog: HTMLElement }>();
 const trainBtnsEl = document.querySelector("#buildbar .train-btns")!;
-const trainWorkerBtn = document.createElement("button");
-trainWorkerBtn.className = "build-btn";
-trainWorkerBtn.innerHTML =
-  `<span>Worker <span class="q" id="q-worker"></span></span>` +
-  `<span class="cost"><span class="f">${UNITS.worker.costFunds}</span></span>` +
-  `<div class="progbar"><i id="prog-worker"></i></div>`;
-trainWorkerBtn.addEventListener("click", () => sim.trainUnit("worker"));
-trainBtnsEl.appendChild(trainWorkerBtn);
+for (const kind of TRAINABLE) {
+  const def = UNITS[kind];
+  const btn = document.createElement("button");
+  btn.className = "build-btn";
+  btn.innerHTML =
+    `<span class="name">${labelOf(kind)} <span class="q"></span></span>` +
+    `<span class="cost"><span class="f">${def.costFunds}</span></span>` +
+    `<div class="progbar"><i></i></div>`;
+  btn.addEventListener("click", () => sim.trainUnit(kind));
+  trainBtnsEl.appendChild(btn);
+  trainBtns.set(kind, {
+    btn,
+    q: btn.querySelector(".q") as HTMLElement,
+    prog: btn.querySelector(".progbar i") as HTMLElement,
+  });
+}
 
-const qWorker = trainWorkerBtn.querySelector("#q-worker") as HTMLElement;
-const progWorker = trainWorkerBtn.querySelector("#prog-worker") as HTMLElement;
+// --- Upgrade license ------------------------------------------------------
+const upgradeBtn = document.getElementById("upgrade-license") as HTMLButtonElement;
+upgradeBtn.addEventListener("click", () => sim.upgradeLicense());
 
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
@@ -222,22 +238,50 @@ const statSel = document.getElementById("stat-sel")!;
 const resFunds = document.getElementById("res-funds")!;
 const resMaterials = document.getElementById("res-materials")!;
 const resLabor = document.getElementById("res-labor")!;
+const resPermits = document.getElementById("res-permits")!;
+const resLicense = document.getElementById("res-license")!;
 
 function updateHud(): void {
-  statUnits.textContent = String(sim.economy.laborUsed); // unit count
-  statSel.textContent = String(selected.size);
   const eco = sim.economy;
+  statUnits.textContent = String(sim.world.query("Unit").length);
+  statSel.textContent = String(selected.size);
   resFunds.textContent = String(Math.floor(eco.funds));
   resMaterials.textContent = String(Math.floor(eco.materials));
   resLabor.textContent = `${eco.laborUsed}/${eco.laborCap}`;
-  for (const [kind, btn] of buildBtns) {
-    btn.classList.toggle("dim", !sim.affordable(kind));
+  resPermits.textContent = String(Math.floor(eco.permits));
+  resLicense.textContent = sim.licenseName();
+
+  // License upgrade button.
+  const next = sim.nextLicense();
+  if (!next) {
+    upgradeBtn.textContent = "License: Skyscraper (max)";
+    upgradeBtn.className = "upgrade-btn maxed";
+  } else {
+    upgradeBtn.innerHTML =
+      `Upgrade → ${next.name} ` +
+      `<span class="ucost">${next.permits}\u{1F4CB} ${next.funds}\u{1F4B0}</span>`;
+    const canUp = eco.permits >= next.permits && eco.funds >= next.funds;
+    upgradeBtn.className = canUp ? "upgrade-btn" : "upgrade-btn dim";
   }
-  const ws = sim.productionStatus("worker");
-  qWorker.textContent = ws.queue > 0 ? `(${ws.queue})` : "";
-  progWorker.style.width = `${ws.progress * 100}%`;
-  const canTrain = eco.funds >= UNITS.worker.costFunds && eco.laborUsed < eco.laborCap;
-  trainWorkerBtn.classList.toggle("dim", !canTrain);
+
+  // Build buttons: lock by tier, dim by affordability.
+  for (const [kind, btn] of buildBtns) {
+    const locked = !sim.buildingUnlocked(kind);
+    btn.classList.toggle("locked", locked);
+    btn.classList.toggle("dim", locked || !sim.affordable(kind));
+  }
+
+  // Train buttons: queue + progress, lock by tier, dim by cost/labor.
+  for (const [kind, ui] of trainBtns) {
+    const st = sim.productionStatus(kind);
+    ui.q.textContent = st.queue > 0 ? `(${st.queue})` : "";
+    ui.prog.style.width = `${st.progress * 100}%`;
+    const locked = !sim.unitUnlocked(kind);
+    const ok =
+      !locked && eco.funds >= UNITS[kind].costFunds && eco.laborUsed < eco.laborCap;
+    ui.btn.classList.toggle("locked", locked);
+    ui.btn.classList.toggle("dim", !ok);
+  }
 }
 
 window.addEventListener("resize", () => {

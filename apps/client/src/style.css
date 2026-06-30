@@ -126,6 +126,54 @@ body,
   background: #4f9be0;
   border-radius: 50%;
 }
+#resourcebar .ico.permits {
+  background: #b07ee0;
+}
+#resourcebar .ico.lic {
+  background: #ffe24d;
+  transform: rotate(45deg);
+}
+#resourcebar .res.sep {
+  border-left: 1px solid rgba(255, 255, 255, 0.14);
+  padding-left: 20px;
+}
+#resourcebar .res.sep b {
+  color: #ffe24d;
+}
+
+.upgrade-btn {
+  display: block;
+  width: 100%;
+  margin-bottom: 10px;
+  padding: 9px 11px;
+  border: 1px solid rgba(176, 126, 224, 0.6);
+  border-radius: 7px;
+  background: rgba(70, 50, 95, 0.9);
+  color: #f0e8fa;
+  font: inherit;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.12s, background 0.12s;
+}
+.upgrade-btn:hover {
+  border-color: #c79bff;
+  background: rgba(86, 62, 116, 0.95);
+}
+.upgrade-btn.dim {
+  opacity: 0.45;
+}
+.upgrade-btn.maxed {
+  border-color: rgba(255, 226, 77, 0.5);
+  background: rgba(60, 56, 30, 0.9);
+  color: #ffe24d;
+  cursor: default;
+}
+.upgrade-btn .ucost {
+  color: #d9c6f0;
+  font-weight: 700;
+}
 
 #buildbar {
   position: fixed;
@@ -176,6 +224,13 @@ body,
 }
 .build-btn.dim {
   opacity: 0.4;
+}
+.build-btn.locked {
+  cursor: not-allowed;
+}
+.build-btn.locked .name::before {
+  content: "🔒 ";
+  font-size: 11px;
 }
 .build-btn {
   position: relative;

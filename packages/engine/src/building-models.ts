@@ -34,7 +34,14 @@ function box(
   return m;
 }
 
-const HEIGHT: Record<string, number> = { hq: 2.6, trailer: 1.1, depot: 2.2, workshop: 2.4 };
+const HEIGHT: Record<string, number> = {
+  hq: 2.6,
+  trailer: 1.1,
+  depot: 2.2,
+  workshop: 2.4,
+  permitOffice: 2.8,
+  craneYard: 2.0,
+};
 
 function buildFinished(kind: string, r: number): THREE.Group {
   const g = new THREE.Group();
@@ -64,6 +71,26 @@ function buildFinished(kind: string, r: number): THREE.Group {
       g.add(post(r * 0.8, r * 0.8));
       g.add(box(r * 2.0, 0.22, r * 2.0, ORANGE, 0, 2.1, 0)); // roof
       g.add(box(r * 1.1, 0.6, r * 1.1, YELLOW, 0, 0.3, 0)); // stacked materials
+      break;
+    }
+    case "permitOffice": {
+      // Civic tower: tall narrow office with a blue roof + a sign board.
+      g.add(box(r * 1.4, 2.8, r * 1.4, WHITE, 0, 1.4, 0));
+      g.add(box(r * 1.5, 0.3, r * 1.5, BLUE, 0, 2.9, 0)); // roof
+      g.add(box(r * 1.42, 0.5, r * 1.42, BLUE, 0, 0.5, 0)); // base band
+      // Sign post + board out front.
+      g.add(box(0.12, 1.4, 0.12, DARK, 0, 0.7, r * 1.1));
+      g.add(box(0.9, 0.6, 0.1, YELLOW, 0, 1.5, r * 1.15)); // permit board
+      break;
+    }
+    case "craneYard": {
+      // Industrial pad with a tall tower-crane structure.
+      g.add(box(r * 1.9, 0.4, r * 1.9, STEEL, 0, 0.2, 0)); // concrete pad
+      g.add(box(r * 0.7, 0.6, r * 0.7, ORANGE, -r * 0.5, 0.5, -r * 0.5)); // equipment shed
+      // Tower crane.
+      g.add(box(0.3, 3.4, 0.3, YELLOW, r * 0.4, 1.9, r * 0.4)); // mast
+      g.add(box(0.22, 0.2, 3.0, YELLOW, r * 0.4, 3.6, r * 0.4 + 0.9)); // jib
+      g.add(box(0.4, 0.4, 0.8, DARK, r * 0.4, 3.6, r * 0.4 - 0.9)); // counterweight
       break;
     }
     default: {

@@ -43,26 +43,48 @@ export interface BuildingDef {
   dropOff: boolean; // accepts harvested materials
   providesLabor: number; // adds to labor cap when complete
   trains: UnitKind[]; // unit kinds this building can produce
+  tier: number; // license tier required to build
+  permitsPerSec: number; // permits generated while complete
 }
 
 export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
-  hq: { radius: 2.6, buildTime: 0, costFunds: 0, costMaterials: 0, dropOff: true, providesLabor: 20, trains: ["worker"] },
-  trailer: { radius: 1.7, buildTime: 8, costFunds: 0, costMaterials: 60, dropOff: false, providesLabor: 8, trains: [] },
-  depot: { radius: 1.9, buildTime: 8, costFunds: 0, costMaterials: 80, dropOff: true, providesLabor: 0, trains: [] },
-  workshop: { radius: 2.2, buildTime: 12, costFunds: 120, costMaterials: 120, dropOff: false, providesLabor: 0, trains: ["excavator"] },
+  hq: { radius: 2.6, buildTime: 0, costFunds: 0, costMaterials: 0, dropOff: true, providesLabor: 20, trains: ["worker"], tier: 0, permitsPerSec: 0 },
+  trailer: { radius: 1.7, buildTime: 8, costFunds: 0, costMaterials: 60, dropOff: false, providesLabor: 8, trains: [], tier: 0, permitsPerSec: 0 },
+  depot: { radius: 1.9, buildTime: 8, costFunds: 0, costMaterials: 80, dropOff: true, providesLabor: 0, trains: [], tier: 0, permitsPerSec: 0 },
+  permitOffice: { radius: 2.0, buildTime: 10, costFunds: 100, costMaterials: 80, dropOff: false, providesLabor: 0, trains: [], tier: 0, permitsPerSec: 0.7 },
+  workshop: { radius: 2.2, buildTime: 12, costFunds: 120, costMaterials: 120, dropOff: false, providesLabor: 0, trains: ["excavator"], tier: 1, permitsPerSec: 0 },
+  craneYard: { radius: 2.4, buildTime: 16, costFunds: 220, costMaterials: 200, dropOff: false, providesLabor: 0, trains: ["crane"], tier: 2, permitsPerSec: 0 },
 };
 
 export interface UnitDef {
   costFunds: number;
   trainTime: number; // seconds to produce
   labor: number; // labor cap consumed
+  tier: number; // license tier required to train
 }
 
 export const UNITS: Record<UnitKind, UnitDef> = {
-  worker: { costFunds: 50, trainTime: 4, labor: 1 },
-  excavator: { costFunds: 120, trainTime: 7, labor: 2 },
-  crane: { costFunds: 200, trainTime: 9, labor: 3 },
+  worker: { costFunds: 50, trainTime: 4, labor: 1, tier: 0 },
+  excavator: { costFunds: 120, trainTime: 7, labor: 2, tier: 1 },
+  crane: { costFunds: 200, trainTime: 9, labor: 3, tier: 2 },
 };
+
+/** License tiers. Index 0 is the starting tier; cost is to REACH that tier. */
+export interface LicenseTier {
+  name: string;
+  upgradeFunds: number;
+  upgradePermits: number;
+}
+
+export const LICENSE_TIERS: LicenseTier[] = [
+  { name: "Residential", upgradeFunds: 0, upgradePermits: 0 },
+  { name: "Commercial", upgradeFunds: 200, upgradePermits: 12 },
+  { name: "Industrial", upgradeFunds: 400, upgradePermits: 28 },
+  { name: "Skyscraper", upgradeFunds: 800, upgradePermits: 55 },
+];
+
+/** Base permit trickle so progress is possible even without a Permit Office. */
+const BASE_PERMIT_RATE = 0.1;
 
 const HARVEST_KINDS: ReadonlySet<UnitKind> = new Set<UnitKind>(["worker", "excavator"]);
 
@@ -74,7 +96,14 @@ export class GameSim {
   readonly world = new World();
   readonly grid = NavGrid.centered(MAP_HALF, 2);
   readonly obstacles: Obstacle[] = [];
-  readonly economy: Economy = { funds: 500, materials: 0, laborUsed: 0, laborCap: 0 };
+  readonly economy: Economy = {
+    funds: 500,
+    materials: 0,
+    laborUsed: 0,
+    laborCap: 0,
+    permits: 0,
+    tier: 0,
+  };
   tick = 0;
 
   constructor() {
@@ -213,6 +242,42 @@ export class GameSim {
     return this.economy.funds >= def.costFunds && this.economy.materials >= def.costMaterials;
   }
 
+  /** Whether the current license tier unlocks this building. */
+  buildingUnlocked(kind: BuildingKind): boolean {
+    return this.economy.tier >= BUILDINGS[kind].tier;
+  }
+
+  /** Whether the current license tier unlocks training this unit. */
+  unitUnlocked(kind: UnitKind): boolean {
+    return this.economy.tier >= UNITS[kind].tier;
+  }
+
+  /** Next license tier and its cost, or null if already maxed. */
+  nextLicense(): { name: string; funds: number; permits: number } | null {
+    const next = this.economy.tier + 1;
+    if (next >= LICENSE_TIERS.length) return null;
+    const t = LICENSE_TIERS[next];
+    return { name: t.name, funds: t.upgradeFunds, permits: t.upgradePermits };
+  }
+
+  licenseName(): string {
+    return LICENSE_TIERS[this.economy.tier].name;
+  }
+
+  /** Spend funds + permits to advance to the next license tier. */
+  upgradeLicense(): boolean {
+    const next = this.economy.tier + 1;
+    if (next >= LICENSE_TIERS.length) return false;
+    const t = LICENSE_TIERS[next];
+    if (this.economy.funds < t.upgradeFunds || this.economy.permits < t.upgradePermits) {
+      return false;
+    }
+    this.economy.funds -= t.upgradeFunds;
+    this.economy.permits -= t.upgradePermits;
+    this.economy.tier = next;
+    return true;
+  }
+
   /**
    * Place a blueprint if it fits and is affordable, deduct its cost, and assign
    * the given units to build it. Returns the new entity, or 0 on failure.
@@ -223,7 +288,9 @@ export class GameSim {
     z: number,
     builders: Iterable<Entity>,
   ): Entity {
-    if (!this.affordable(kind) || !this.canPlaceAt(kind, x, z)) return 0;
+    if (!this.buildingUnlocked(kind) || !this.affordable(kind) || !this.canPlaceAt(kind, x, z)) {
+      return 0;
+    }
     const def = BUILDINGS[kind];
     this.economy.funds -= def.costFunds;
     this.economy.materials -= def.costMaterials;
@@ -276,6 +343,7 @@ export class GameSim {
    */
   trainUnit(kind: UnitKind): boolean {
     const def = UNITS[kind];
+    if (!this.unitUnlocked(kind)) return false;
     if (this.economy.funds < def.costFunds) return false;
     if (this.reservedLabor() + def.labor > this.economy.laborCap) return false;
     for (const e of this.world.query(C.Producer, C.Building)) {
@@ -377,6 +445,15 @@ export class GameSim {
     harvestSystem(this.world, this.grid, this.economy, TICK_DT);
     constructionSystem(this.world, this.grid, TICK_DT, (e) => this.completeBuilding(e));
     this.advanceProduction(TICK_DT);
+
+    // Permits trickle in from a base rate plus completed Permit Offices.
+    let permitRate = BASE_PERMIT_RATE;
+    for (const e of this.world.query(C.Building)) {
+      if (this.world.has(e, C.Construction)) continue;
+      permitRate += BUILDINGS[this.world.get<Building>(e, C.Building)!.kind].permitsPerSec;
+    }
+    this.economy.permits += permitRate * TICK_DT;
+
     let labor = 0;
     for (const e of this.world.query(C.Unit)) labor += UNITS[this.world.get<Unit>(e, C.Unit)!.kind].labor;
     this.economy.laborUsed = labor;
