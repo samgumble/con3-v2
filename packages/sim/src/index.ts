@@ -5,4 +5,5 @@ export { findPath } from "./pathfind";
 export { SpatialHash } from "./spatial-hash";
 export { movementSystem } from "./systems/movement";
 export { separationSystem } from "./systems/avoidance";
+export { harvestSystem } from "./systems/harvest";
 export type { Entity } from "@con3/ecs";

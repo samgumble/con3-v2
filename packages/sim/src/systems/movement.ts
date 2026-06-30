@@ -1,7 +1,7 @@
 import type { World } from "@con3/ecs";
 import {
   C,
-  type Obstacle,
+  type Collider,
   type PathFollow,
   type Transform,
   type Unit,
@@ -38,7 +38,7 @@ const MAX_REPLANS = 3; // after this many replans without arriving, give up
 export function movementSystem(
   world: World,
   grid: NavGrid,
-  obstacles: Obstacle[],
+  obstacles: readonly Collider[],
   dt: number,
 ): void {
   const movers = world.query(C.Transform, C.Unit, C.PathFollow).sort((a, b) => a - b);

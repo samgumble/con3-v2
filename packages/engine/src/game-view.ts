@@ -1,6 +1,7 @@
 import * as THREE from "three";
 import { RtsCamera } from "./rts-camera";
 import { buildUnitGeometries } from "./unit-models";
+import { buildBuildingMesh, buildDepositMesh } from "./building-models";
 
 /** Minimal render description of a unit (decoupled from the sim package). */
 export interface RenderUnit {
@@ -19,6 +20,39 @@ export interface RenderObstacle {
   z: number;
   radius: number;
   kind: "rocks" | "stockpile";
+}
+
+/** Render description of a building. */
+export interface RenderBuilding {
+  id: number;
+  x: number;
+  z: number;
+  rot: number;
+  kind: string;
+  radius: number;
+  progress: number; // 0..1, 1 = complete
+  selected: boolean;
+}
+
+/** Render description of a resource deposit. */
+export interface RenderNode {
+  id: number;
+  x: number;
+  z: number;
+  radius: number;
+  amount: number;
+  maxAmount: number;
+}
+
+interface BuildingVisual {
+  group: THREE.Group;
+  ring: THREE.Mesh;
+  stageKey: string;
+}
+
+interface NodeVisual {
+  group: THREE.Group;
+  seen: boolean;
 }
 
 /** Per-unit interpolation state. Meshes are instanced, not per-entity. */
@@ -63,6 +97,8 @@ export class GameView {
   private readonly visuals = new Map<number, UnitVisual>();
   private readonly kindMeshes = new Map<string, THREE.InstancedMesh>();
   private readonly ringMesh: THREE.InstancedMesh;
+  private readonly buildings = new Map<number, BuildingVisual>();
+  private readonly nodes = new Map<number, NodeVisual>();
 
   private readonly raycaster = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -222,6 +258,72 @@ export class GameView {
       }
     }
     return group;
+  }
+
+  /** Create/update/remove building meshes to match the sim. */
+  syncBuildings(list: RenderBuilding[]): void {
+    const seen = new Set<number>();
+    for (const b of list) {
+      seen.add(b.id);
+      const stageKey =
+        b.progress >= 1 ? `${b.kind}:done` : `${b.kind}:${Math.floor(b.progress * 3)}`;
+      let v = this.buildings.get(b.id);
+      if (!v || v.stageKey !== stageKey) {
+        if (v) this.scene.remove(v.group);
+        const group = buildBuildingMesh(b.kind, b.radius, b.progress);
+        const ring = new THREE.Mesh(
+          new THREE.RingGeometry(b.radius * 1.05, b.radius * 1.3, 28),
+          new THREE.MeshBasicMaterial({
+            color: 0x53ff7a,
+            side: THREE.DoubleSide,
+            transparent: true,
+            opacity: 0.9,
+          }),
+        );
+        ring.rotation.x = -Math.PI / 2;
+        ring.position.y = 0.05;
+        group.add(ring);
+        group.position.set(b.x, 0, b.z);
+        group.rotation.y = b.rot;
+        this.scene.add(group);
+        v = { group, ring, stageKey };
+        this.buildings.set(b.id, v);
+      } else {
+        v.group.position.set(b.x, 0, b.z);
+        v.group.rotation.y = b.rot;
+      }
+      v.ring.visible = b.selected;
+    }
+    for (const [id, v] of this.buildings) {
+      if (!seen.has(id)) {
+        this.scene.remove(v.group);
+        this.buildings.delete(id);
+      }
+    }
+  }
+
+  /** Create/update/remove deposit meshes; scale by remaining amount. */
+  syncNodes(list: RenderNode[]): void {
+    for (const v of this.nodes.values()) v.seen = false;
+    for (const n of list) {
+      let v = this.nodes.get(n.id);
+      if (!v) {
+        const group = buildDepositMesh(n.radius);
+        group.position.set(n.x, 0, n.z);
+        this.scene.add(group);
+        v = { group, seen: true };
+        this.nodes.set(n.id, v);
+      }
+      const fill = Math.max(0.3, n.amount / Math.max(1, n.maxAmount));
+      v.group.scale.set(0.6 + 0.4 * fill, fill, 0.6 + 0.4 * fill);
+      v.seen = true;
+    }
+    for (const [id, v] of this.nodes) {
+      if (!v.seen) {
+        this.scene.remove(v.group);
+        this.nodes.delete(id);
+      }
+    }
   }
 
   /** Record a fresh sim snapshot. Shifts current → previous for interpolation. */

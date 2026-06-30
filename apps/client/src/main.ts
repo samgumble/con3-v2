@@ -17,6 +17,8 @@ sim.spawnUnit(3, 11, "crane");
 // --- Renderer -------------------------------------------------------------
 const view = new GameView(app);
 view.setObstacles(sim.obstacles); // static rock piles / stockpiles
+view.syncBuildings(sim.buildingSnapshot());
+view.syncNodes(sim.nodeSnapshot());
 view.onTick(sim.snapshot()); // seed visuals before first frame
 
 // --- Selection + commands -------------------------------------------------
@@ -52,9 +54,13 @@ canvas.addEventListener("mousedown", (e) => {
     selBox.style.display = "block";
     updateSelBox(e.clientX, e.clientY);
   } else if (e.button === 2) {
-    // Right-click: order selected units to the ground point.
+    // Right-click: gather a deposit if one was clicked, otherwise move.
     const p = view.worldFromScreen(e.clientX, e.clientY);
-    if (p && selected.size > 0) sim.commandMove(selected, p.x, p.z);
+    if (p && selected.size > 0) {
+      const node = sim.nodeAt(p.x, p.z);
+      if (node) sim.assignHarvest(selected, node);
+      else sim.commandMove(selected, p.x, p.z);
+    }
   }
 });
 
@@ -126,14 +132,19 @@ function pickBox(x0: number, y0: number, x1: number, y1: number): void {
 }
 
 // --- HUD ------------------------------------------------------------------
-const statTick = document.getElementById("stat-tick")!;
 const statUnits = document.getElementById("stat-units")!;
 const statSel = document.getElementById("stat-sel")!;
+const resFunds = document.getElementById("res-funds")!;
+const resMaterials = document.getElementById("res-materials")!;
+const resLabor = document.getElementById("res-labor")!;
 
 function updateHud(): void {
-  statTick.textContent = String(sim.tick);
-  statUnits.textContent = String(sim.world.size);
+  statUnits.textContent = String(sim.economy.laborUsed); // unit count
   statSel.textContent = String(selected.size);
+  const eco = sim.economy;
+  resFunds.textContent = String(Math.floor(eco.funds));
+  resMaterials.textContent = String(Math.floor(eco.materials));
+  resLabor.textContent = `${eco.laborUsed}/${eco.laborCap}`;
 }
 
 window.addEventListener("resize", () => {
@@ -157,6 +168,8 @@ function frame(now: number): void {
     acc -= TICK_DT;
   }
 
+  view.syncBuildings(sim.buildingSnapshot());
+  view.syncNodes(sim.nodeSnapshot());
   view.render(acc / TICK_DT, dt, pointerInside ? pointer : undefined);
   updateHud();
   requestAnimationFrame(frame);

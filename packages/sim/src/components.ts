@@ -46,12 +46,68 @@ export interface Selectable {
 
 export type UnitKind = "worker" | "excavator" | "crane";
 
-/** Static, immovable thing on the map that units must route/steer around. */
-export interface Obstacle {
+/** Anything circular that units steer around (rocks, buildings, deposits). */
+export interface Collider {
   x: number;
   z: number;
   radius: number;
+}
+
+/** Static decorative obstacle on the map (a kind of collider). */
+export interface Obstacle extends Collider {
   kind: "rocks" | "stockpile";
+}
+
+/** Which player owns an entity (0 = human; AI players added later). */
+export interface Owner {
+  player: number;
+}
+
+export type BuildingKind = "hq" | "trailer" | "depot" | "workshop";
+
+/** A placed structure. Footprint radius is used for collision + placement. */
+export interface Building {
+  kind: BuildingKind;
+  radius: number;
+}
+
+/** Present while a building is under construction (0..1 progress). */
+export interface Construction {
+  progress: number;
+  /** Total worker-seconds of effort to finish. */
+  buildTime: number;
+}
+
+/** Marks a (completed) building where harvested materials can be dropped off. */
+export interface DropOff {
+  empty?: never;
+}
+
+/** A material deposit that workers mine. */
+export interface ResourceNode {
+  amount: number;
+  maxAmount: number;
+  radius: number;
+}
+
+export type HarvestState = "toNode" | "mining" | "toDrop" | "unloading" | "idle";
+
+/** Drives a worker through the gather → haul → deposit cycle. */
+export interface Harvester {
+  state: HarvestState;
+  nodeId: number; // assigned resource node entity (0 = none)
+  dropId: number; // chosen drop-off building entity (0 = none)
+  carrying: number;
+  capacity: number;
+  timer: number; // counts down during mining/unloading
+}
+
+/** Player resource pools. */
+export interface Economy {
+  funds: number;
+  materials: number;
+  laborUsed: number;
+  laborCap: number;
 }
 
 export const C = {
@@ -59,4 +115,10 @@ export const C = {
   PathFollow: "PathFollow",
   Unit: "Unit",
   Selectable: "Selectable",
+  Owner: "Owner",
+  Building: "Building",
+  Construction: "Construction",
+  DropOff: "DropOff",
+  ResourceNode: "ResourceNode",
+  Harvester: "Harvester",
 } as const;

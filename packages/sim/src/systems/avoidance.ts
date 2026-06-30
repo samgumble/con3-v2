@@ -1,5 +1,5 @@
 import type { World } from "@con3/ecs";
-import { C, type Obstacle, type Transform, type Unit } from "../components";
+import { C, type Collider, type Transform, type Unit } from "../components";
 import { SpatialHash } from "../spatial-hash";
 
 const CELL = 3;
@@ -13,7 +13,7 @@ const SEP_ITERS = 2; // relaxation passes to resolve dense multi-unit pileups
  * idle one (idle units act as anchors), so crews flow *around* stationary units
  * rather than shoving them across the map.
  */
-export function separationSystem(world: World, obstacles: Obstacle[]): void {
+export function separationSystem(world: World, obstacles: readonly Collider[]): void {
   const units = world.query(C.Transform, C.Unit).sort((a, b) => a - b);
   if (units.length === 0) return;
 
