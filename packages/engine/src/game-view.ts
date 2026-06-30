@@ -2,6 +2,7 @@ import * as THREE from "three";
 import { RtsCamera } from "./rts-camera";
 import { buildUnitGeometries } from "./unit-models";
 import { buildBuildingMesh, buildDepositMesh, buildMegaprojectMesh } from "./building-models";
+import { buildSiteDecor } from "./site-decor";
 
 /** Minimal render description of a unit (decoupled from the sim package). */
 export interface RenderUnit {
@@ -127,11 +128,13 @@ export class GameView {
 
     this.cameraCtl = new RtsCamera(w / h, this.renderer.domElement);
 
-    this.scene.background = new THREE.Color(0x1b2129);
-    this.scene.fog = new THREE.Fog(0x1b2129, 90, 200);
+    // Bright, slightly hazy daytime sky so hi-vis colours pop.
+    this.scene.background = new THREE.Color(0xaab7c2);
+    this.scene.fog = new THREE.Fog(0xaab7c2, 95, 215);
 
     this.buildLighting();
     this.buildGround();
+    this.scene.add(buildSiteDecor(60));
     this.buildUnitMeshes();
     this.ringMesh = this.buildRingMesh();
 
@@ -139,34 +142,59 @@ export class GameView {
   }
 
   private buildLighting(): void {
-    const hemi = new THREE.HemisphereLight(0xbfd4ff, 0x40362a, 0.65);
+    const hemi = new THREE.HemisphereLight(0xdfeaf5, 0x7a6b54, 0.9);
     this.scene.add(hemi);
+    this.scene.add(new THREE.AmbientLight(0xffffff, 0.12));
 
-    const sun = new THREE.DirectionalLight(0xfff2dd, 1.1);
-    sun.position.set(40, 60, 20);
+    const sun = new THREE.DirectionalLight(0xfff4e0, 1.35);
+    sun.position.set(48, 66, 28);
     sun.castShadow = true;
     sun.shadow.mapSize.set(2048, 2048);
-    const s = 70;
+    const s = 72;
     sun.shadow.camera.left = -s;
     sun.shadow.camera.right = s;
     sun.shadow.camera.top = s;
     sun.shadow.camera.bottom = -s;
     sun.shadow.camera.near = 1;
-    sun.shadow.camera.far = 200;
+    sun.shadow.camera.far = 220;
+    sun.shadow.bias = -0.0004;
     this.scene.add(sun);
   }
 
   private buildGround(): void {
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x6b5d4f, roughness: 1 });
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 140), groundMat);
+    // Dusty graded-dirt lot.
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x83745d, roughness: 1 });
+    const ground = new THREE.Mesh(new THREE.PlaneGeometry(150, 150), groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    const grid = new THREE.GridHelper(140, 70, 0x3a4654, 0x2a323c);
-    (grid.material as THREE.Material).opacity = 0.35;
+    // Scattered darker patches (mud / churned earth / tracks).
+    const rand = mulberry32(0x3c0ffee);
+    const patchMat = new THREE.MeshStandardMaterial({ color: 0x6b5d49, roughness: 1 });
+    const trackMat = new THREE.MeshStandardMaterial({ color: 0x5d513f, roughness: 1 });
+    for (let i = 0; i < 22; i++) {
+      const r = 2 + rand() * 5;
+      const patch = new THREE.Mesh(new THREE.CircleGeometry(r, 7), patchMat);
+      patch.rotation.x = -Math.PI / 2;
+      patch.position.set((rand() - 0.5) * 110, 0.012, (rand() - 0.5) * 110);
+      patch.receiveShadow = true;
+      this.scene.add(patch);
+    }
+    // A couple of tyre-track strips.
+    for (let i = 0; i < 4; i++) {
+      const strip = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 30 + rand() * 20), trackMat);
+      strip.rotation.x = -Math.PI / 2;
+      strip.rotation.z = rand() * Math.PI;
+      strip.position.set((rand() - 0.5) * 80, 0.014, (rand() - 0.5) * 60);
+      this.scene.add(strip);
+    }
+
+    // Faint survey grid.
+    const grid = new THREE.GridHelper(150, 75, 0x6f7d88, 0x5a6670);
+    (grid.material as THREE.Material).opacity = 0.18;
     (grid.material as THREE.Material).transparent = true;
-    grid.position.y = 0.01;
+    grid.position.y = 0.02;
     this.scene.add(grid);
   }
 
