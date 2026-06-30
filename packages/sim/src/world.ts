@@ -1,6 +1,7 @@
 import { World, type Entity } from "@con3/ecs";
 import {
   C,
+  type Obstacle,
   type PathFollow,
   type Selectable,
   type Transform,
@@ -10,7 +11,7 @@ import {
 import { NavGrid } from "./grid";
 import { findPath } from "./pathfind";
 import { movementSystem } from "./systems/movement";
-import { avoidanceSystem } from "./systems/avoidance";
+import { separationSystem } from "./systems/avoidance";
 
 /** Fixed simulation rate. The renderer interpolates between ticks. */
 export const TICK_RATE = 20;
@@ -30,13 +31,6 @@ const RADIUS: Record<UnitKind, number> = {
   excavator: 0.8,
   crane: 1.0,
 };
-
-export interface Obstacle {
-  x: number;
-  z: number;
-  radius: number;
-  kind: "rocks" | "stockpile";
-}
 
 /**
  * Owns the ECS world, the navigation grid, and advances the sim one fixed tick
@@ -93,7 +87,15 @@ export class GameSim {
       const tz = z + Math.sin(angle) * ring;
       const path = findPath(this.grid, t.x, t.z, tx, tz);
       if (path) {
-        this.world.add<PathFollow>(e, C.PathFollow, { waypoints: path, index: 0 });
+        this.world.add<PathFollow>(e, C.PathFollow, {
+          waypoints: path,
+          index: 0,
+          goalX: tx,
+          goalZ: tz,
+          stuckTicks: 0,
+          bestDist: Infinity,
+          replans: 0,
+        });
       }
     });
   }
@@ -113,8 +115,8 @@ export class GameSim {
 
   /** Advance exactly one fixed tick. */
   step(): void {
-    movementSystem(this.world, TICK_DT);
-    avoidanceSystem(this.world);
+    movementSystem(this.world, this.grid, this.obstacles, TICK_DT);
+    separationSystem(this.world, this.obstacles);
     this.tick++;
   }
 

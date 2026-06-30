@@ -1,76 +1,93 @@
 import type { World } from "@con3/ecs";
-import { C, type Transform, type Unit } from "../components";
+import { C, type Obstacle, type Transform, type Unit } from "../components";
+import { SpatialHash } from "../spatial-hash";
 
-/** Cell size for the neighbor hash — a bit larger than the biggest unit. */
-const CELL = 2.5;
-
-function key(cx: number, cy: number): number {
-  // Pack two smallish signed cell coords into one number key.
-  return (cx + 4096) * 100000 + (cy + 4096);
-}
+const CELL = 3;
+const SEP_ITERS = 2; // relaxation passes to resolve dense multi-unit pileups
 
 /**
- * Separate overlapping units by pushing pairs apart along their connecting
- * axis. Uses a uniform spatial hash so it stays near-linear with unit count.
- * Iterates entities in id order and resolves each pair once (j > i) for
- * deterministic results.
+ * Safety net after steering: resolve any residual overlaps and push units out
+ * of obstacles so nothing ever ends up stacked or clipping into a rock.
+ *
+ * Overlap resolution is mobility-weighted — a moving unit gives way fully to an
+ * idle one (idle units act as anchors), so crews flow *around* stationary units
+ * rather than shoving them across the map.
  */
-export function avoidanceSystem(world: World): void {
+export function separationSystem(world: World, obstacles: Obstacle[]): void {
   const units = world.query(C.Transform, C.Unit).sort((a, b) => a - b);
-  if (units.length < 2) return;
+  if (units.length === 0) return;
 
-  const tf: Transform[] = [];
-  const rad: number[] = [];
-  const buckets = new Map<number, number[]>();
-
-  for (let i = 0; i < units.length; i++) {
-    const e = units[i];
+  const hash = new SpatialHash(CELL);
+  const transforms = new Map<number, Transform>();
+  for (const e of units) {
     const t = world.get<Transform>(e, C.Transform)!;
-    const u = world.get<Unit>(e, C.Unit)!;
-    tf.push(t);
-    rad.push(u.radius);
-    const cx = Math.floor(t.x / CELL);
-    const cy = Math.floor(t.z / CELL);
-    const k = key(cx, cy);
-    const b = buckets.get(k);
-    if (b) b.push(i);
-    else buckets.set(k, [i]);
+    transforms.set(e, t);
+    hash.insert(e, t.x, t.z);
   }
 
-  for (let i = 0; i < units.length; i++) {
-    const ti = tf[i];
-    const cx = Math.floor(ti.x / CELL);
-    const cy = Math.floor(ti.z / CELL);
+  // Unit-unit de-overlap, each pair handled once (j > i). A couple of
+  // relaxation passes resolve chains of overlaps in dense crowds.
+  for (let iter = 0; iter < SEP_ITERS; iter++) {
+    for (const e of units) {
+      const ti = transforms.get(e)!;
+      const ui = world.get<Unit>(e, C.Unit)!;
+      const moverI = world.has(e, C.PathFollow);
 
-    for (let ox = -1; ox <= 1; ox++) {
-      for (let oy = -1; oy <= 1; oy++) {
-        const b = buckets.get(key(cx + ox, cy + oy));
-        if (!b) continue;
-        for (const j of b) {
-          if (j <= i) continue; // resolve each pair once
-          const tj = tf[j];
-          let dx = tj.x - ti.x;
-          let dz = tj.z - ti.z;
-          const minDist = rad[i] + rad[j];
-          let d2 = dx * dx + dz * dz;
-          if (d2 >= minDist * minDist) continue;
+      hash.forNeighbors(ti.x, ti.z, (j) => {
+        if (j <= e) return;
+        const tj = transforms.get(j)!;
+        const uj = world.get<Unit>(j, C.Unit)!;
 
-          let dist = Math.sqrt(d2);
-          if (dist < 1e-4) {
-            // Exactly overlapping: nudge apart deterministically.
-            dx = (i % 2 === 0 ? 1 : -1) * 0.01;
-            dz = 0.01;
-            dist = Math.hypot(dx, dz);
-          }
-          const overlap = minDist - dist;
-          const pushX = (dx / dist) * overlap * 0.5;
-          const pushZ = (dz / dist) * overlap * 0.5;
-          ti.x -= pushX;
-          ti.z -= pushZ;
-          tj.x += pushX;
-          tj.z += pushZ;
+        let rx = tj.x - ti.x;
+        let rz = tj.z - ti.z;
+        const minDist = ui.radius + uj.radius;
+        const d2 = rx * rx + rz * rz;
+        if (d2 >= minDist * minDist) return;
+
+        let dist = Math.sqrt(d2);
+        if (dist < 1e-4) {
+          // Exactly coincident: nudge apart deterministically.
+          rx = (e % 2 === 0 ? 1 : -1) * 0.01;
+          rz = 0.01;
+          dist = Math.hypot(rx, rz);
         }
-      }
+        const overlap = minDist - dist;
+        const nx = rx / dist;
+        const nz = rz / dist;
+
+        // Split the correction by mobility: movers yield to idle anchors.
+        const moverJ = world.has(j, C.PathFollow);
+        let wi = 0.5;
+        let wj = 0.5;
+        if (moverI && !moverJ) {
+          wi = 1;
+          wj = 0;
+        } else if (!moverI && moverJ) {
+          wi = 0;
+          wj = 1;
+        }
+        ti.x -= nx * overlap * wi;
+        ti.z -= nz * overlap * wi;
+        tj.x += nx * overlap * wj;
+        tj.z += nz * overlap * wj;
+      });
+    }
+  }
+
+  // Push any unit overlapping an obstacle straight back out (exact circle).
+  for (const e of units) {
+    const t = transforms.get(e)!;
+    const u = world.get<Unit>(e, C.Unit)!;
+    for (const o of obstacles) {
+      const rx = t.x - o.x;
+      const rz = t.z - o.z;
+      const minDist = o.radius + u.radius;
+      const d2 = rx * rx + rz * rz;
+      if (d2 >= minDist * minDist) continue;
+      const dist = Math.sqrt(d2) || 1e-4;
+      const push = minDist - dist;
+      t.x += (rx / dist) * push;
+      t.z += (rz / dist) * push;
     }
   }
 }

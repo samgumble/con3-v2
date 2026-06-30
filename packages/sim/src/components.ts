@@ -19,6 +19,15 @@ export interface PathFollow {
   waypoints: { x: number; z: number }[];
   /** Index of the waypoint currently being walked toward. */
   index: number;
+  /** Final destination, kept for replanning if the unit gets pushed off-path. */
+  goalX: number;
+  goalZ: number;
+  /** Ticks elapsed without getting closer to the goal (stuck detection). */
+  stuckTicks: number;
+  /** Closest distance-to-goal achieved so far. */
+  bestDist: number;
+  /** How many times the path has been replanned (give up after too many). */
+  replans: number;
 }
 
 /** Marks a controllable unit and its movement profile. */
@@ -36,6 +45,14 @@ export interface Selectable {
 }
 
 export type UnitKind = "worker" | "excavator" | "crane";
+
+/** Static, immovable thing on the map that units must route/steer around. */
+export interface Obstacle {
+  x: number;
+  z: number;
+  radius: number;
+  kind: "rocks" | "stockpile";
+}
 
 export const C = {
   Transform: "Transform",

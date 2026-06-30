@@ -55,6 +55,13 @@ export class RtsCamera {
     this.camera.updateProjectionMatrix();
   }
 
+  /** Recenter the camera's focus on a world ground point. */
+  focusOn(x: number, z: number): void {
+    this.target.x = THREE.MathUtils.clamp(x, -this.bounds, this.bounds);
+    this.target.z = THREE.MathUtils.clamp(z, -this.bounds, this.bounds);
+    this.apply();
+  }
+
   /** Advance camera from input. Call once per rendered frame. */
   update(dt: number, pointer?: { x: number; y: number; w: number; h: number }): void {
     let fx = 0;
