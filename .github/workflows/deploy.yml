@@ -35,11 +35,13 @@ jobs:
         run: pnpm --filter @con3/client build
 
       - name: Deploy to Netlify
+        uses: nwtgck/actions-netlify@v3.0
+        with:
+          publish-dir: apps/client/dist
+          production-deploy: true
+          deploy-message: "CI deploy ${{ github.sha }}"
+          enable-pull-request-comment: false
+          enable-commit-comment: false
         env:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
-        run: >
-          pnpm --package=netlify-cli@17 dlx netlify deploy
-          --dir=apps/client/dist
-          --prod
-          --message "CI deploy ${{ github.sha }}"
