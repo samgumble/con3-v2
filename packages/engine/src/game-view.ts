@@ -5,7 +5,13 @@ import { UnrealBloomPass } from "three/examples/jsm/postprocessing/UnrealBloomPa
 import { OutputPass } from "three/examples/jsm/postprocessing/OutputPass.js";
 import { RtsCamera } from "./rts-camera";
 import { buildUnitGeometries } from "./unit-models";
-import { buildBuildingMesh, buildDepositMesh, buildMegaprojectMesh, megaStageKey } from "./building-models";
+import {
+  buildBuildingMesh,
+  buildDepositMesh,
+  buildMegaprojectMesh,
+  megaStageKey,
+  STOCK_SLOTS,
+} from "./building-models";
 import { buildSiteDecor } from "./site-decor";
 import { ParticleFX } from "./particles";
 
@@ -46,6 +52,9 @@ export interface RenderBuilding {
   megaPhase?: number;
   /** Progress within the current phase (0..1) — drives floor-by-floor visuals. */
   megaFrac?: number;
+  /** Drop-off stockpile: materials banked here + capacity (drives the stack). */
+  stock?: number;
+  stockCap?: number;
 }
 
 /** Render description of a resource deposit. */
@@ -503,10 +512,11 @@ export class GameView {
       seen.add(b.id);
       const isMega = b.megaPhase !== undefined;
       if (isMega) this.hqPos = (this.hqPos ?? new THREE.Vector3()).set(b.x, 0, b.z);
+      const stockFrac = b.stockCap && b.stockCap > 0 ? (b.stock ?? 0) / b.stockCap : 0;
       const stageKey = isMega
         ? `mega:${megaStageKey(b.megaPhase!, b.megaFrac ?? 0)}`
         : b.progress >= 1
-          ? `${b.kind}:done`
+          ? `${b.kind}:done:${Math.round(stockFrac * STOCK_SLOTS)}`
           : `${b.kind}:${Math.floor(b.progress * 3)}`;
       let v = this.buildings.get(b.id);
       if (!v || v.stageKey !== stageKey) {
@@ -522,7 +532,7 @@ export class GameView {
         }
         const group = isMega
           ? buildMegaprojectMesh(b.megaPhase!, b.megaFrac ?? 0, b.radius)
-          : buildBuildingMesh(b.kind, b.radius, b.progress);
+          : buildBuildingMesh(b.kind, b.radius, b.progress, stockFrac);
         const ring = new THREE.Mesh(
           new THREE.RingGeometry(b.radius * 1.05, b.radius * 1.3, 28),
           new THREE.MeshBasicMaterial({

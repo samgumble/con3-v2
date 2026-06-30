@@ -16,6 +16,7 @@ import {
   type Producer,
   type ResourceNode,
   type Selectable,
+  type Stockpile,
   type Transform,
   type Unit,
   type UnitKind,
@@ -138,6 +139,13 @@ const GAME_MONTH = 50; // seconds per payment
 const MONTHLY_BASE = 40; // funds paid at phase 0
 const MONTHLY_PER_PHASE = 6; // extra funds per completed HQ phase
 
+/** Site generators (rendered by the engine at these spots) — solid colliders so
+ *  crews walk around them instead of through them. */
+const GENERATORS: Collider[] = [
+  { x: -19, z: 19, radius: 1.2 },
+  { x: 22, z: 8, radius: 1.2 },
+];
+
 /** Global effect modifiers, altered by active hazards. */
 interface Mods {
   speed: number; // worker movement multiplier
@@ -251,6 +259,8 @@ export class GameSim {
       this.obstacles.push(o);
       this.grid.blockCircle(o.x, o.z, o.radius);
     }
+    // Generators block the grid too (so A* routes around them).
+    for (const gnr of GENERATORS) this.grid.blockCircle(gnr.x, gnr.z, gnr.radius);
   }
 
   private spawnDeposits(): void {
@@ -296,9 +306,12 @@ export class GameSim {
     const b = this.world.get<Building>(e, C.Building)!;
     const def = BUILDINGS[b.kind];
     this.world.remove(e, C.Construction);
-    if (def.dropOff) this.world.add(e, C.DropOff, {});
+    if (def.dropOff) {
+      this.world.add(e, C.DropOff, {});
+      // A drop-off banks materials on-site in its own visible stockpile.
+      this.world.add<Stockpile>(e, C.Stockpile, { amount: 0, capacity: def.providesStorage });
+    }
     this.economy.laborCap += def.providesLabor;
-    this.economy.materialsCap += def.providesStorage;
   }
 
   spawnUnit(x: number, z: number, kind: UnitKind = "worker"): Entity {
@@ -399,6 +412,23 @@ export class GameSim {
     return this.economy.funds >= def.costFunds && this.economy.materials >= def.costMaterials;
   }
 
+  /** Draw `n` materials from the stockpiles (fullest first). Returns amount taken. */
+  private spendMaterials(n: number): number {
+    let need = n;
+    const piles = this.world
+      .query(C.Stockpile)
+      .map((e) => this.world.get<Stockpile>(e, C.Stockpile)!)
+      .sort((a, b) => b.amount - a.amount);
+    for (const sp of piles) {
+      if (need <= 0) break;
+      const take = Math.min(sp.amount, need);
+      sp.amount -= take;
+      need -= take;
+    }
+    this.economy.materials = Math.max(0, this.economy.materials - (n - need));
+    return n - need;
+  }
+
   /** Whether the current license tier unlocks this building. */
   buildingUnlocked(kind: BuildingKind): boolean {
     return this.economy.tier >= BUILDINGS[kind].tier;
@@ -450,7 +480,7 @@ export class GameSim {
     }
     const def = BUILDINGS[kind];
     this.economy.funds -= def.costFunds;
-    this.economy.materials -= def.costMaterials;
+    this.spendMaterials(def.costMaterials);
     const e = this.spawnBuilding(kind, x, z, false);
     for (const b of builders) {
       if (!this.world.has(b, C.Unit)) continue; // any unit can build
@@ -601,7 +631,7 @@ export class GameSim {
       this.world.remove(e, C.Harvester);
       this.world.remove(e, C.Builder);
       this.world.remove(e, C.PathFollow);
-      this.world.add<MegaBuilder>(e, C.MegaBuilder, {});
+      this.world.add<MegaBuilder>(e, C.MegaBuilder, { carrying: 0, srcId: 0 });
       any = true;
     }
     return any;
@@ -670,7 +700,7 @@ export class GameSim {
 
   /** Rebuild the avoidance collider list (rocks + buildings + deposits). */
   private colliders(): Collider[] {
-    const list: Collider[] = [...this.obstacles];
+    const list: Collider[] = [...this.obstacles, ...GENERATORS];
     for (const e of this.world.query(C.Building, C.Transform)) {
       const t = this.world.get<Transform>(e, C.Transform)!;
       const b = this.world.get<Building>(e, C.Building)!;
@@ -690,7 +720,7 @@ export class GameSim {
     const colliders = this.colliders();
     movementSystem(this.world, this.grid, colliders, TICK_DT, this.mods.speed);
     separationSystem(this.world, colliders);
-    harvestSystem(this.world, this.grid, this.economy, TICK_DT, {
+    harvestSystem(this.world, this.grid, TICK_DT, {
       allowed: this.mods.harvestAllowed,
       yieldMul: this.mods.gatherYield,
     });
@@ -735,6 +765,18 @@ export class GameSim {
       this.paymentsCount++;
     }
 
+    // Materials live in per-building stockpiles; the economy total + cap are
+    // derived from them (drives the HUD + build-cost affordability).
+    let mat = 0;
+    let cap = 0;
+    for (const e of this.world.query(C.Stockpile)) {
+      const sp = this.world.get<Stockpile>(e, C.Stockpile)!;
+      mat += sp.amount;
+      cap += sp.capacity;
+    }
+    this.economy.materials = mat;
+    this.economy.materialsCap = cap;
+
     let labor = 0;
     for (const e of this.world.query(C.Unit)) labor += UNITS[this.world.get<Unit>(e, C.Unit)!.kind].labor;
     this.economy.laborUsed = labor;
@@ -766,8 +808,9 @@ export class GameSim {
       const u = this.world.get<Unit>(e, C.Unit)!;
       const s = this.world.get<Selectable>(e, C.Selectable);
       const h = this.world.get<Harvester>(e, C.Harvester);
+      const mb = this.world.get<MegaBuilder>(e, C.MegaBuilder);
       let task: UnitSnapshot["task"] = "idle";
-      if (this.world.has(e, C.MegaBuilder)) task = "mega";
+      if (mb) task = "mega";
       else if (this.world.has(e, C.Builder)) task = "build";
       else if (h) task = "gather";
       else if (this.world.has(e, C.PathFollow)) task = "move";
@@ -780,7 +823,7 @@ export class GameSim {
         radius: u.radius,
         selected: s?.selected ?? false,
         moving: this.world.has(e, C.PathFollow),
-        carrying: h?.carrying ?? 0,
+        carrying: h?.carrying ?? mb?.carrying ?? 0,
         task,
       });
     }
@@ -795,6 +838,7 @@ export class GameSim {
       const c = this.world.get<Construction>(e, C.Construction);
       const s = this.world.get<Selectable>(e, C.Selectable);
       const mp = this.world.get<MegaProject>(e, C.MegaProject);
+      const sp = this.world.get<Stockpile>(e, C.Stockpile);
       out.push({
         id: e,
         x: t.x,
@@ -814,6 +858,8 @@ export class GameSim {
                 mp.phaseEffort / PHASES[mp.phaseIndex].effort,
               )
           : undefined,
+        stock: sp ? sp.amount : undefined,
+        stockCap: sp ? sp.capacity : undefined,
       });
     }
     return out;
@@ -857,6 +903,9 @@ export interface BuildingSnapshot {
   megaTotal?: number;
   /** Progress within the current phase (0..1) — drives floor-by-floor visuals. */
   megaFrac?: number;
+  /** For drop-off buildings: materials banked here + capacity (visible stack). */
+  stock?: number;
+  stockCap?: number;
 }
 
 export interface NodeSnapshot {

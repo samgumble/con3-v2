@@ -27,25 +27,27 @@ it's waiting on something (like a crane).
 ## 🔁 The core loop
 
 ```
-   Mine Materials          Haul to a            Send crews to        Completing a
-   from a deposit  ──▶  drop-off (Field   ──▶   the HQ; they    ──▶  phase pays you
-   (gravel piles)       Office / Depot)        spend Materials      Funds → reinvest
-                                               + effort to advance
-                                               the next phase
+  Mine from        Haul to a          A SECOND crew         Completing a
+  a deposit  ──▶  stockpile     ──▶  hauls the stock  ──▶  phase pays you
+  (gravel)        (Field Office       to the HQ + builds    Funds → reinvest
+                  / Depot — it        it, phase by phase
+                  stacks up there)
 ```
 
-1. **Gather.** Right-click a **materials deposit** (the gravel/aggregate piles in
-   timber bays) with a worker selected. They mine, then automatically haul the
-   load back to the nearest drop-off.
-2. **Store.** Materials are banked at any **drop-off** building (your **Field
-   Office**, or any **Depot** you build). You have a **storage cap** — gather past
-   it and the overflow is wasted, so build Depots to bank more.
-3. **Build the HQ.** Right-click the **HQ** with crews selected to assign them.
-   On-site crews spend stored Materials + their own effort to push the current
-   phase forward.
-4. **Get paid.** Each completed phase pays a **Funds** progress-payment (they get
-   bigger as the tower rises). Spend Funds on more crews, support buildings, and
-   license upgrades — then do it all faster.
+It's a real, two-stage supply line — materials are physically carried at every step, not teleported:
+
+1. **Gather.** Right-click a **materials deposit** with a worker/excavator. They
+   mine, then haul the load to the **nearest stockpile** building — your **Field
+   Office** at first, or a **Depot** once you build one.
+2. **Stockpile.** Materials **pile up visibly** at that building (you can watch the
+   crates stack — the Depot is open-topped so you can see it). Each building has
+   its **own storage cap**; overflow past it is wasted, so build Depots for more.
+3. **Build the HQ.** Right-click the **HQ** with a crew. Those crews are *separate*
+   from your gatherers: they **fetch materials from your stockpiles and carry them
+   to the HQ**, then add build effort on-site. So you need *both* gatherers
+   (filling stockpiles) **and** an HQ crew (hauling + building) running at once.
+4. **Get paid.** Each completed phase pays a **Funds** progress-payment (bigger as
+   the tower rises). Reinvest in crews, buildings, and license upgrades.
 
 ---
 
@@ -91,7 +93,7 @@ Funds. Higher-tier buildings need a higher **license** (see below).
 | **HQ** | — | — | The megaproject. Win by finishing its 12 phases. (Already on site.) |
 | **Field Office** | pre-built | — | Your ops base: accepts Materials (drop-off), trains Workers, +16 labor, +100 storage. |
 | **Trailer** | 60 Materials | Residential | Worker housing: **+10 labor cap** so you can field more units. |
-| **Depot** | 70 Materials | Residential | Storage yard: **+220 storage** and a **forward drop-off** — put it near the deposits. |
+| **Depot** | 70 Materials | Residential | Open storage yard: **+220 storage** and a **forward drop-off** that **stacks materials in plain view** — put it near the deposits to shorten the gather trip. |
 | **Permit Office** | 100 Funds + 80 Materials | Residential | Generates **Permits** (+0.7/sec) for license upgrades. |
 | **Workshop** | 120 Funds + 120 Materials | Commercial | Trains **Excavators**. |
 | **Crane Yard** | 220 Funds + 180 Materials | Industrial | Trains **Cranes** (required to top out the HQ). |
@@ -108,10 +110,12 @@ Tracked along the **top resource bar**.
   HQ rises. The retainer means Funds *always* keep climbing, so you can never get
   permanently broke even if a phase is blocked. Spent on units, the costlier
   buildings, and license upgrades.
-- **🧱 Materials** — mined from deposits, banked at drop-offs. **Deposits are
-  renewable** — they slowly restock over time, so the site never runs dry (and
-  idle crews automatically go back to work once a deposit refills). **Capped by
-  storage** (start: 100; raise it with Depots). Spent on HQ phases and most buildings.
+- **🧱 Materials** — mined from deposits and **banked in each drop-off's own
+  visible stockpile** (Field Office, Depots). The number on the bar is your total
+  across all stockpiles. **Deposits are renewable** (they slowly restock, and idle
+  crews resume when they refill). Each building has its **own storage cap** (Field
+  Office 100, Depot +220) — overflow is wasted. Materials are spent on buildings,
+  and the HQ's are physically **hauled to the site by your HQ crew**.
 - **👷 Labor** — your population cap, shown as *used / total*. Each unit takes 1–3.
   Raise the cap with the Field Office (16) and **Trailers** (+10 each).
 - **📋 Permits** — the currency for license upgrades. A slow base trickle, sped up
@@ -211,9 +215,14 @@ just moves — each with a coloured ping so you can see the order land.
 
 ## 🧠 A solid opening
 
-1. **Gather immediately.** Send your starting workers to the nearest deposit. Keep
-   them mining and hauling.
-2. **Build a Depot** near the deposits early — more storage *and* a shorter haul.
+1. **Split your crew.** Send *some* workers to the nearest deposit to gather (they
+   fill your Field Office stockpile), and assign *others* to the HQ — those will
+   shuttle the stockpiled materials to the site and build. You need **both** lines
+   running: gatherers feeding the stockpile, HQ crew emptying it into the tower. If
+   the HQ's Materials bar isn't filling, you've run your stockpiles dry — send more
+   gatherers.
+2. **Build a Depot** near the deposits early — more storage, a shorter gather trip,
+   and you can watch the pile stack up in its open yard.
 3. **Put up a Permit Office** so Permits start accumulating toward Commercial.
 4. **Make more Workers** (build a Trailer when your labor cap gets tight).
 5. **Advance the early HQ phases** (1–5) — they're cheap and pay you Funds to

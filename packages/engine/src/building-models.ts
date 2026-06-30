@@ -66,7 +66,7 @@ const HEIGHT: Record<string, number> = {
   craneYard: 2.0,
 };
 
-function buildFinished(kind: string, r: number): THREE.Group {
+function buildFinished(kind: string, r: number, stockFrac = 0): THREE.Group {
   const g = new THREE.Group();
   switch (kind) {
     case "hq": {
@@ -102,26 +102,15 @@ function buildFinished(kind: string, r: number): THREE.Group {
       break;
     }
     case "depot": {
-      // Open steel canopy sheltering stacked site materials (storage yard).
-      const post = (x: number, z: number) => box(0.2, 2.1, 0.2, STEEL, x, 1.05, z);
-      for (const sx of [-r * 0.85, r * 0.85]) for (const sz of [-r * 0.85, r * 0.85]) g.add(post(sx, sz));
-      g.add(box(r * 2.15, 0.18, r * 2.15, ORANGE, 0, 2.2, 0)); // canopy roof
-      g.add(box(r * 2.2, 0.1, 0.18, YELLOW, 0, 2.33, 0)); // ridge cap
-      g.add(box(r * 1.7, 0.1, 0.1, STEEL, 0, 1.85, -r * 0.85)); // cross-brace
-      // Timber retaining bay (two low walls).
-      g.add(box(r * 1.9, 0.5, 0.14, TIMBER, 0, 0.25, -r * 0.78));
-      g.add(box(0.14, 0.5, r * 1.7, TIMBER, -r * 0.78, 0.25, 0));
-      // Timber stack.
-      for (let i = 0; i < 3; i++) g.add(box(0.8, 0.18, r * 1.2, TIMBER, -r * 0.4, 0.35 + i * 0.2, r * 0.1));
-      // Pallet of blocks/sacks.
-      g.add(box(0.72, 0.12, 0.72, TIMBER, r * 0.55, 0.18, -r * 0.25));
-      g.add(box(0.6, 0.42, 0.6, CONCRETE, r * 0.55, 0.45, -r * 0.25));
-      // Pipe bundle (run front-to-back under the canopy).
-      for (const [pz, py] of [[-0.18, 0], [0.18, 0], [0, 0.3]] as const) {
-        const p = cyl(0.15, 0.15, r * 1.5, STEEL, r * 0.5, 0.32 + py, r * 0.45 + pz, 8);
-        p.rotation.x = Math.PI / 2;
-        g.add(p);
-      }
+      // OPEN materials yard — no roof, so the banked stockpile stacks in plain
+      // view (the pile itself is a dynamic mesh added via buildStockpileStack).
+      const post = (x: number, z: number) => box(0.18, 1.5, 0.18, STEEL, x, 0.75, z);
+      for (const sx of [-r * 0.9, r * 0.9]) for (const sz of [-r * 0.9, r * 0.9]) g.add(post(sx, sz));
+      // L-shaped timber retaining bay (back + left), open at the front.
+      g.add(box(r * 1.95, 0.55, 0.14, TIMBER, 0, 0.28, -r * 0.85));
+      g.add(box(0.14, 0.55, r * 1.75, TIMBER, -r * 0.85, 0.28, 0));
+      g.add(box(r * 1.95, 0.12, 0.14, YELLOW, 0, 0.62, -r * 0.85)); // hi-vis cap rail
+      g.add(box(r * 1.65, 0.06, 0.12, STEEL, 0, 1.45, -r * 0.85)); // top tie between posts
       break;
     }
     case "fieldOffice": {
@@ -212,7 +201,40 @@ function buildFinished(kind: string, r: number): THREE.Group {
       for (let i = 0; i < 3; i++) g.add(cyl(0.42, 0.42, 0.2, TIRE, r * 1.25, 0.12 + i * 0.2, r * 0.5, 12));
     }
   }
+  // Drop-off buildings show their banked materials as a growing stack — in the
+  // open bay for the depot, out front for the field office (clear of the trailer).
+  if (stockFrac > 0.001 && kind === "depot") buildStockpileStack(g, stockFrac, r, -r * 0.15, -r * 0.45);
+  else if (stockFrac > 0.001 && kind === "fieldOffice") buildStockpileStack(g, stockFrac, r, -r * 0.2, r * 1.35);
   return g;
+}
+
+/** Number of crate slots in a full stockpile pile (also the rebuild granularity). */
+export const STOCK_SLOTS = 14;
+
+/** A growing pile of material crates + aggregate at a stockpile (fill 0..1). */
+function buildStockpileStack(g: THREE.Group, fill: number, r: number, ox: number, oz: number): void {
+  const cw = 0.42; // crate edge
+  const cols = [0xc9a14a, 0xb5651d, 0x9fa6ad, CONCRETE];
+  // Pyramid of crate slots, bottom layer first (3x3 → 2x2 → 1).
+  const slots: [number, number, number][] = [];
+  for (const L of [{ n: 3, y: 0 }, { n: 2, y: cw }, { n: 1, y: cw * 2 }]) {
+    const span = L.n - 1;
+    for (let ix = 0; ix < L.n; ix++) {
+      for (let iz = 0; iz < L.n; iz++) {
+        slots.push([(ix - span / 2) * (cw + 0.05), L.y + cw / 2 + 0.05, (iz - span / 2) * (cw + 0.05)]);
+      }
+    }
+  }
+  const show = Math.min(slots.length, Math.round(fill * STOCK_SLOTS));
+  for (let i = 0; i < show; i++) {
+    const [x, y, z] = slots[i];
+    g.add(box(cw, cw, cw, cols[i % cols.length], ox + x, y, oz + z));
+  }
+  // A loose aggregate mound beside the crates that grows with the pile.
+  if (fill > 0.12) {
+    const h = 0.25 + fill * 0.55;
+    g.add(cyl(0.03, r * 0.38 * Math.min(1, fill + 0.25), h, 0xc2a878, r * 0.5, h / 2 + 0.05, oz + 0.2, 7));
+  }
 }
 
 function buildUnderConstruction(kind: string, r: number, progress: number): THREE.Group {
@@ -237,9 +259,14 @@ function buildUnderConstruction(kind: string, r: number, progress: number): THRE
 }
 
 /** Build the mesh for a building given its construction progress. */
-export function buildBuildingMesh(kind: string, radius: number, progress: number): THREE.Group {
+export function buildBuildingMesh(
+  kind: string,
+  radius: number,
+  progress: number,
+  stockFrac = 0,
+): THREE.Group {
   return progress >= 1
-    ? buildFinished(kind, radius)
+    ? buildFinished(kind, radius, stockFrac)
     : buildUnderConstruction(kind, radius, progress);
 }
 

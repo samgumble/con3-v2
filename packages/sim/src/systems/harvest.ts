@@ -2,10 +2,10 @@ import type { Entity, World } from "@con3/ecs";
 import {
   C,
   type Building,
-  type Economy,
   type Harvester,
   type PathFollow,
   type ResourceNode,
+  type Stockpile,
   type Transform,
   type Unit,
 } from "../components";
@@ -71,7 +71,6 @@ function nearestNode(world: World, x: number, z: number): Entity {
 export function harvestSystem(
   world: World,
   grid: NavGrid,
-  economy: Economy,
   dt: number,
   opts: { allowed?: boolean; yieldMul?: number } = {},
 ): void {
@@ -188,9 +187,13 @@ export function harvestSystem(
       case "unloading": {
         h.timer -= dt;
         if (h.timer <= 0) {
-          // Deposit into the yard, clamped to storage capacity (excess is lost).
+          // Bank into THIS drop-off's own stockpile, clamped to its capacity
+          // (excess is lost). Materials now accumulate per-building, visibly.
           const gained = h.carrying * yieldMul; // shortage halves yield
-          economy.materials = Math.min(economy.materialsCap, economy.materials + gained);
+          const sp = h.dropId && world.isAlive(h.dropId)
+            ? world.get<Stockpile>(h.dropId, C.Stockpile)
+            : undefined;
+          if (sp) sp.amount = Math.min(sp.capacity, sp.amount + gained);
           h.carrying = 0;
           const node = h.nodeId && world.isAlive(h.nodeId) ? h.nodeId : nearestNode(world, t.x, t.z);
           h.nodeId = node;

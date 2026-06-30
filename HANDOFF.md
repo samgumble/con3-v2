@@ -96,11 +96,14 @@ Hazard "buildAllowed=false" gates construction + megaproject; "produceAllowed",
 (kind: worker|excavator|crane) · `Selectable{selected}` · `Owner{player}` (0 =
 human; reserved for AI) · `Obstacle/Collider{x,z,radius}` · `Building{kind,radius}`
 · `Construction{progress,buildTime}` (support buildings) · `DropOff` (accepts
-materials) · `ResourceNode{amount,maxAmount,radius}` · `Harvester{state,nodeId,
+materials) · `Stockpile{amount,capacity}` (per-drop-off material bank — materials
+live here, not in a global pool; `economy.materials/Cap` are derived as the sum)
+· `ResourceNode{amount,maxAmount,radius}` · `Harvester{state,nodeId,
 dropId,carrying,capacity,timer}` · `Builder{targetId}` (builds a support
 building) · `Producer{trains,queue,progress}` · `MegaProject{phaseIndex,
-phaseMaterials,phaseEffort,complete}` (only on the HQ) · `MegaBuilder` (tag:
-worker assigned to the HQ). `C` is the string-key registry.
+phaseMaterials,phaseEffort,complete}` (only on the HQ) · `MegaBuilder{carrying,
+srcId}` (HQ crew: hauls from a stockpile to the site, then builds). `C` is the
+string-key registry.
 
 ## 6. Systems (packages/sim/src/systems/ + GameSim)
 
@@ -118,14 +121,18 @@ worker assigned to the HQ). `C` is the string-key registry.
 - **avoidance.ts** (`separationSystem`) — mobility-weighted de-overlap (movers
   yield to idle anchors) + push units out of obstacle circles. 2 relax passes.
 - **harvest.ts** — gather state machine: toNode→mining→toDrop→unloading. Drains
-  a `ResourceNode`, deposits into `economy.materials` at a `DropOff`.
+  a `ResourceNode`, deposits into the drop-off building's own `Stockpile` (clamped
+  to its capacity) — materials now bank per-building, not in a global pool.
 - **construction.ts** — `Builder`s walk to a support-building blueprint and add
   effort; `onComplete` calls `GameSim.completeBuilding` (registers DropOff,
   grants labor). NOTE: skips builders whose target isn't a `Construction` — the
   HQ uses `MegaBuilder`, not `Builder`, so no conflict.
-- **megaproject.ts** — `MegaBuilder`s walk to the HQ; on-site crews add effort +
-  drain `economy.materials` into the current phase; phase completes when both
-  targets met; final phase calls `onWin` → `sim.won=true`.
+- **megaproject.ts** — a physical supply line. Each `MegaBuilder`: (a) if carrying,
+  delivers its load to the HQ (`phaseMaterials += carrying`); (b) else if the phase
+  still needs materials and it can haul, fetches a load from the nearest `Stockpile`
+  (`nearestStock`); (c) else stands on-site and adds effort. Effort is gated by the
+  crane requirement (cranes can't haul, so workers must keep them supplied). Phase
+  completes when both targets met; final phase → `onWin` → `sim.won=true`.
 - **production** (`advanceProduction` in world.ts) — `Producer.queue` advances;
   spawns the unit beside the building. **hazards** (`advanceHazards`) — seeded
   RNG scheduler; sets global `Mods`.
@@ -281,6 +288,24 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- Two-stage supply line + per-building stockpiles + generators as obstacles
+  (large mechanic change). (1) **Generators are now colliders** — `GENERATORS`
+  const in world.ts, blocked in the grid + added to `colliders()`, so crews route
+  around the two site generators (engine still renders them). (2) **Materials live
+  in per-building `Stockpile` components** (added to drop-offs on completion;
+  capacity = `providesStorage`). Gatherers deposit into the nearest drop-off's
+  stockpile (harvest.ts); `economy.materials`/`materialsCap` are now **derived
+  each tick** as the sum of stockpiles (HUD + build-cost affordability);
+  `spendMaterials()` pulls build costs from stockpiles. (3) **The HQ crew hauls.**
+  `megaprojectSystem` rewritten: a `MegaBuilder` (now `{carrying, srcId}`) fetches
+  a load from the nearest stockpile, carries it to the HQ to advance `phaseMaterials`,
+  then adds effort on-site (cranes can't haul → workers must keep them supplied).
+  No more global-pool auto-draw. (4) **Visuals:** depot is **roofless** with a
+  dynamic crate/aggregate `buildStockpileStack` (also at the field office), keyed
+  by `STOCK_SLOTS` so it rebuilds as the pile grows/shrinks; the snapshot carries
+  `stock`/`stockCap`. Verified: stockpiles derive the economy, crew hauls
+  field-office→HQ (100→0, phases 0→2), generator paths detour (min dist 2.01),
+  determinism intact (3 identical runs with hauling).
 - HQ built floor-by-floor + 10× detail. `buildMegaprojectMesh(phase, frac,
   radius)` now renders a 14-storey tower one storey at a time from the sub-phase
   fraction (new `megaFrac` on the building snapshot): steel frame rises (phase 5),

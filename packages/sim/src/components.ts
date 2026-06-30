@@ -103,6 +103,13 @@ export interface DropOff {
   empty?: never;
 }
 
+/** Materials banked at a drop-off building — they accumulate visibly on site
+ *  and must be hauled to the HQ by an assigned crew (not teleported). */
+export interface Stockpile {
+  amount: number;
+  capacity: number;
+}
+
 /** A material deposit that workers mine. */
 export interface ResourceNode {
   amount: number;
@@ -142,9 +149,13 @@ export interface MegaProject {
   complete: boolean;
 }
 
-/** Tags a unit as working the megaproject (delivers materials + effort). */
+/** A unit assigned to the HQ: it hauls materials from a stockpile to the site,
+ *  then contributes build effort while on-site. */
 export interface MegaBuilder {
-  empty?: never;
+  /** Materials currently carried toward the HQ (0 = not hauling). */
+  carrying: number;
+  /** Stockpile building currently being fetched from (0 = none). */
+  srcId: number;
 }
 
 /** A building that trains units from a queue. */
@@ -180,6 +191,7 @@ export const C = {
   Building: "Building",
   Construction: "Construction",
   DropOff: "DropOff",
+  Stockpile: "Stockpile",
   ResourceNode: "ResourceNode",
   Harvester: "Harvester",
   Builder: "Builder",
