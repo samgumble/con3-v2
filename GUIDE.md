@@ -199,6 +199,7 @@ backlog of trained crews means a Rainstorm or Strike costs you less momentum.
 | Select units | **Left-drag** a box, or click |
 | Select all of a type on screen | **Double-click** a unit |
 | Command (move / gather / build / work HQ) | **Right-click** the target |
+| **Pan / drag the map** | **Hold right-click and drag** (grab the terrain) |
 | Assign control group | **Ctrl + 1–9** |
 | Recall control group | **1–9** |
 | Cycle to an idle worker | **Tab** (Shift+Tab = select all idle) |

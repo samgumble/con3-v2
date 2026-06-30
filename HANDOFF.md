@@ -226,9 +226,10 @@ victory overlay. `index.html` + `style.css` hold the DOM/styling.
 
 ## 10. Controls (player)
 
-Drag=select · Dbl-click=all of type · Right-click=move/gather/build/HQ ·
-Ctrl+1-9=set group · 1-9=recall · Tab=idle worker · WASD/arrows/edges=pan ·
-Q/E=rotate · wheel=zoom · Esc=cancel build.
+Left-drag=box-select · Dbl-click=all of type · Right-click=move/gather/build/HQ ·
+**Right-DRAG=grab-pan the map** · Ctrl+1-9=set group · 1-9=recall · Tab=idle worker ·
+WASD/arrows/edges=pan · Q/E=rotate · wheel=zoom · Esc=cancel build. (Right action
+is deferred to mouseup so drag vs click can be distinguished.)
 
 ## 11. Key decisions & WHY (don't undo without reason)
 
@@ -288,6 +289,15 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- Hold-right-click-drag pans the map + floors build out more slowly. (1)
+  `RtsCamera.dragPan(dxPx,dyPx,viewportH)` grab-pans along the camera ground axes
+  (scaled by zoom + tilt). main.ts now **defers the right-click action to mouseup**:
+  a right-DRAG (>4px) pans; a right-CLICK runs the context action (`rightClickAction`
+  helper); edge-scroll is suppressed while right-dragging. (2) The HQ's floor-by-
+  floor ramps in `megaBuildState` were **widened** so the tower rises gradually
+  across more phases (structure phases 5→7 instead of ~5; glazing 7→9) — e.g. only
+  ~5 of 14 structural storeys by end of phase 5 (was ~11). Same total game length,
+  just a slower, more deliberate build-out. Both verified in-browser.
 - Two-stage supply line + per-building stockpiles + generators as obstacles
   (large mechanic change). (1) **Generators are now colliders** — `GENERATORS`
   const in world.ts, blocked in the grid + added to `colliders()`, so crews route

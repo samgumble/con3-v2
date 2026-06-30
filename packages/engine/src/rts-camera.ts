@@ -76,6 +76,27 @@ export class RtsCamera {
     this.shakeAmt = Math.max(this.shakeAmt, amount);
   }
 
+  /**
+   * Grab-pan the map by a screen-pixel drag delta (for hold-right-click-drag).
+   * The point under the cursor stays roughly pinned, so it feels like dragging
+   * the terrain. Scaled by zoom + view tilt, and resolved along the camera's
+   * ground axes so it's correct at every yaw.
+   */
+  dragPan(dxPx: number, dyPx: number, viewportH: number): void {
+    const fovRad = THREE.MathUtils.degToRad(this.camera.fov);
+    const groundPerPx = (2 * this.distance * Math.tan(fovRad / 2)) / Math.max(1, viewportH);
+    const wx = dxPx * groundPerPx; // screen-horizontal → ground span
+    const wz = (dyPx * groundPerPx) / Math.sin(this.pitch); // vertical is foreshortened by tilt
+    const sin = Math.sin(this.yaw);
+    const cos = Math.cos(this.yaw);
+    // The world follows the cursor → target moves opposite the drag.
+    this.target.x -= wx * cos + wz * sin;
+    this.target.z -= -wx * sin + wz * cos;
+    this.target.x = THREE.MathUtils.clamp(this.target.x, -this.bounds, this.bounds);
+    this.target.z = THREE.MathUtils.clamp(this.target.z, -this.bounds, this.bounds);
+    this.apply();
+  }
+
   /** Advance camera from input. Call once per rendered frame. */
   update(dt: number, pointer?: { x: number; y: number; w: number; h: number }): void {
     let fx = 0;

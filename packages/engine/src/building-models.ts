@@ -311,11 +311,14 @@ export interface MegaState {
 export function megaBuildState(phase: number, frac: number): MegaState {
   const complete = phase >= 12;
   const cp = complete ? 12 : phase + clamp01(frac);
-  const structProg = complete ? 1 : ramp(cp, 5.0, 6.3);
-  const slabProg = complete ? 1 : ramp(cp, 5.35, 6.7);
-  const coreProg = complete ? 1 : ramp(cp, 4.85, 6.1);
-  const glazeProg = complete ? 1 : ramp(cp, 7.0, 8.25);
-  const litProg = complete ? 1 : ramp(cp, 10.0, 11.2);
+  // Floors rise GRADUALLY across several phases (not all in one) so the tower
+  // builds out slowly: structure climbs through phases 5–7, decks just behind,
+  // glazing through 7–9 (always trailing the frame), fit-out lighting last.
+  const structProg = complete ? 1 : ramp(cp, 5.0, 7.6);
+  const slabProg = complete ? 1 : ramp(cp, 5.4, 7.9);
+  const coreProg = complete ? 1 : ramp(cp, 4.9, 7.2);
+  const glazeProg = complete ? 1 : ramp(cp, 7.2, 9.7);
+  const litProg = complete ? 1 : ramp(cp, 9.8, 11.4);
   const structFloors = Math.round(HQ_FLOORS * structProg);
   const glazedFloors = Math.round(HQ_FLOORS * glazeProg);
   return {
@@ -324,9 +327,9 @@ export function megaBuildState(phase: number, frac: number): MegaState {
     glazedFloors,
     litFloors: Math.round(HQ_FLOORS * litProg),
     coreFloors: Math.round((HQ_FLOORS + 1) * coreProg),
-    roof: complete || cp >= 8.0,
+    roof: complete || cp >= 7.9,
     parapet: complete || cp >= 8.3,
-    crown: complete || cp >= 9.0,
+    crown: complete || cp >= 9.2,
     spire: complete || cp >= 11.4,
     complete,
     structActive: !complete && structProg > 0 && structFloors < HQ_FLOORS,

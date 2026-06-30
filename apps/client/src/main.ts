@@ -42,6 +42,13 @@ document.body.appendChild(selBox);
 let dragging = false;
 let startX = 0;
 let startY = 0;
+// Right-button drag → pan the map; a right-button click (no drag) → command.
+let rightDown = false;
+let rightPanned = false;
+let rightDownX = 0;
+let rightDownY = 0;
+let lastRX = 0;
+let lastRY = 0;
 // Latest pointer position (window-relative) for edge scrolling. Start centered
 // so we don't trigger edge-scroll before the mouse has moved.
 const pointer = {
@@ -168,46 +175,56 @@ upgradeBtn.addEventListener("click", () => sim.upgradeLicense());
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
 canvas.addEventListener("mousedown", (e) => {
-  // In build mode, left-click places and right-click cancels.
+  if (e.button === 2) {
+    // Defer the right action to mouseup, so a right-DRAG pans the map instead
+    // of issuing a command (or cancelling a build).
+    rightDown = true;
+    rightPanned = false;
+    rightDownX = lastRX = e.clientX;
+    rightDownY = lastRY = e.clientY;
+    return;
+  }
   if (buildMode) {
     if (e.button === 0) {
       const p = view.worldFromScreen(e.clientX, e.clientY);
       if (p && sim.placeBuilding(buildMode, p.x, p.z, selected) && !e.shiftKey) {
         exitBuild();
       }
-    } else if (e.button === 2) {
-      exitBuild();
     }
     return;
   }
-
   if (e.button === 0) {
     dragging = true;
     startX = e.clientX;
     startY = e.clientY;
     selBox.style.display = "block";
     updateSelBox(e.clientX, e.clientY);
-  } else if (e.button === 2) {
-    // Right-click: work the HQ, build an in-progress site, gather, or move.
-    const p = view.worldFromScreen(e.clientX, e.clientY);
-    if (p && selected.size > 0) {
-      const bld = sim.buildingAt(p.x, p.z);
-      const node = sim.nodeAt(p.x, p.z);
-      if (bld && bld === sim.hqEntity()) {
-        sim.assignMegaBuild(selected); // send crews to the megaproject
-        view.pingMarker(p.x, p.z, 0x53ff7a);
-      } else if (bld && sim.assignBuild(selected, bld)) {
-        view.pingMarker(p.x, p.z, 0x4f9be0); // build = blue
-      } else if (node) {
-        sim.assignHarvest(selected, node);
-        view.pingMarker(p.x, p.z, 0xffc24b); // gather = amber
-      } else {
-        sim.commandMove(selected, p.x, p.z);
-        view.pingMarker(p.x, p.z, 0x53ff7a); // move = green
-      }
-    }
   }
 });
+
+/** The right-click context action (cancel build / HQ / build / gather / move). */
+function rightClickAction(clientX: number, clientY: number): void {
+  if (buildMode) {
+    exitBuild();
+    return;
+  }
+  const p = view.worldFromScreen(clientX, clientY);
+  if (!p || selected.size === 0) return;
+  const bld = sim.buildingAt(p.x, p.z);
+  const node = sim.nodeAt(p.x, p.z);
+  if (bld && bld === sim.hqEntity()) {
+    sim.assignMegaBuild(selected); // send crews to the megaproject
+    view.pingMarker(p.x, p.z, 0x53ff7a);
+  } else if (bld && sim.assignBuild(selected, bld)) {
+    view.pingMarker(p.x, p.z, 0x4f9be0); // build = blue
+  } else if (node) {
+    sim.assignHarvest(selected, node);
+    view.pingMarker(p.x, p.z, 0xffc24b); // gather = amber
+  } else {
+    sim.commandMove(selected, p.x, p.z);
+    view.pingMarker(p.x, p.z, 0x53ff7a); // move = green
+  }
+}
 
 // --- Control groups, idle workers, double-click ---------------------------
 const controlGroups = new Map<string, Set<Entity>>();
@@ -288,6 +305,15 @@ window.addEventListener("mousemove", (e) => {
   pointer.x = e.clientX;
   pointer.y = e.clientY;
   pointerInside = true;
+  // Hold-right-drag pans the map (once the cursor moves past a small threshold).
+  if (rightDown) {
+    if (!rightPanned && Math.hypot(e.clientX - rightDownX, e.clientY - rightDownY) > 4) {
+      rightPanned = true;
+    }
+    if (rightPanned) view.cameraCtl.dragPan(e.clientX - lastRX, e.clientY - lastRY, window.innerHeight);
+    lastRX = e.clientX;
+    lastRY = e.clientY;
+  }
   if (buildMode) {
     const p = view.worldFromScreen(e.clientX, e.clientY);
     if (p) {
@@ -299,9 +325,19 @@ window.addEventListener("mousemove", (e) => {
 });
 
 document.addEventListener("mouseleave", () => (pointerInside = false));
-window.addEventListener("blur", () => (pointerInside = false));
+window.addEventListener("blur", () => {
+  pointerInside = false;
+  rightDown = false; // don't get stuck mid-pan if focus is lost
+});
 
 window.addEventListener("mouseup", (e) => {
+  if (e.button === 2) {
+    rightDown = false;
+    // A right-drag panned the map → swallow it; a right-click → run the action.
+    if (!rightPanned) rightClickAction(e.clientX, e.clientY);
+    rightPanned = false;
+    return;
+  }
   if (e.button !== 0 || !dragging) return;
   dragging = false;
   selBox.style.display = "none";
@@ -550,7 +586,7 @@ function frame(now: number): void {
 
   view.syncBuildings(sim.buildingSnapshot());
   view.syncNodes(sim.nodeSnapshot());
-  view.render(acc / TICK_DT, dt, pointerInside ? pointer : undefined);
+  view.render(acc / TICK_DT, dt, pointerInside && !rightDown ? pointer : undefined);
   updateHud();
   requestAnimationFrame(frame);
 }
