@@ -87,12 +87,15 @@ export class RtsCamera {
       const len = Math.hypot(fx, fz) || 1;
       fx /= len;
       fz /= len;
-      // Pan relative to yaw, scaled by zoom so it feels consistent.
+      // Pan along the camera's own ground axes, scaled by zoom so it feels
+      // consistent. forward = (-sin, -cos), right = (cos, -sin); fz<0 is forward
+      // (W) and fx>0 is right (D). Deriving from these keeps pan correct at
+      // every yaw (the previous formula inverted near ±90°).
       const speed = this.panSpeed * (this.distance / 28) * dt;
       const sin = Math.sin(this.yaw);
       const cos = Math.cos(this.yaw);
-      this.target.x += (fx * cos - fz * sin) * speed;
-      this.target.z += (fx * sin + fz * cos) * speed;
+      this.target.x += (fx * cos + fz * sin) * speed;
+      this.target.z += (fz * cos - fx * sin) * speed;
       this.target.x = THREE.MathUtils.clamp(this.target.x, -this.bounds, this.bounds);
       this.target.z = THREE.MathUtils.clamp(this.target.z, -this.bounds, this.bounds);
     }
