@@ -11,6 +11,7 @@ import {
   type Obstacle,
   type Owner,
   type PathFollow,
+  type Producer,
   type ResourceNode,
   type Selectable,
   type Transform,
@@ -41,13 +42,26 @@ export interface BuildingDef {
   costMaterials: number;
   dropOff: boolean; // accepts harvested materials
   providesLabor: number; // adds to labor cap when complete
+  trains: UnitKind[]; // unit kinds this building can produce
 }
 
 export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
-  hq: { radius: 2.6, buildTime: 0, costFunds: 0, costMaterials: 0, dropOff: true, providesLabor: 10 },
-  trailer: { radius: 1.7, buildTime: 8, costFunds: 0, costMaterials: 60, dropOff: false, providesLabor: 8 },
-  depot: { radius: 1.9, buildTime: 8, costFunds: 0, costMaterials: 80, dropOff: true, providesLabor: 0 },
-  workshop: { radius: 2.2, buildTime: 12, costFunds: 120, costMaterials: 120, dropOff: false, providesLabor: 0 },
+  hq: { radius: 2.6, buildTime: 0, costFunds: 0, costMaterials: 0, dropOff: true, providesLabor: 20, trains: ["worker"] },
+  trailer: { radius: 1.7, buildTime: 8, costFunds: 0, costMaterials: 60, dropOff: false, providesLabor: 8, trains: [] },
+  depot: { radius: 1.9, buildTime: 8, costFunds: 0, costMaterials: 80, dropOff: true, providesLabor: 0, trains: [] },
+  workshop: { radius: 2.2, buildTime: 12, costFunds: 120, costMaterials: 120, dropOff: false, providesLabor: 0, trains: ["excavator"] },
+};
+
+export interface UnitDef {
+  costFunds: number;
+  trainTime: number; // seconds to produce
+  labor: number; // labor cap consumed
+}
+
+export const UNITS: Record<UnitKind, UnitDef> = {
+  worker: { costFunds: 50, trainTime: 4, labor: 1 },
+  excavator: { costFunds: 120, trainTime: 7, labor: 2 },
+  crane: { costFunds: 200, trainTime: 9, labor: 3 },
 };
 
 const HARVEST_KINDS: ReadonlySet<UnitKind> = new Set<UnitKind>(["worker", "excavator"]);
@@ -110,6 +124,9 @@ export class GameSim {
     this.world.add<Owner>(e, C.Owner, { player: 0 });
     this.world.add<Building>(e, C.Building, { kind, radius: def.radius });
     this.world.add<Selectable>(e, C.Selectable, { selected: false });
+    if (def.trains.length > 0) {
+      this.world.add<Producer>(e, C.Producer, { trains: def.trains, queue: [], progress: 0 });
+    }
     if (completed) {
       this.completeBuilding(e);
     } else {
@@ -241,6 +258,72 @@ export class GameSim {
     return 0;
   }
 
+  /** Total labor reserved by units already alive plus everything queued. */
+  private reservedLabor(): number {
+    let total = 0;
+    for (const e of this.world.query(C.Unit)) {
+      total += UNITS[this.world.get<Unit>(e, C.Unit)!.kind].labor;
+    }
+    for (const e of this.world.query(C.Producer)) {
+      for (const k of this.world.get<Producer>(e, C.Producer)!.queue) total += UNITS[k].labor;
+    }
+    return total;
+  }
+
+  /**
+   * Queue a unit for production at a completed building that can train it.
+   * Charges funds up front and checks the labor cap. Returns true on success.
+   */
+  trainUnit(kind: UnitKind): boolean {
+    const def = UNITS[kind];
+    if (this.economy.funds < def.costFunds) return false;
+    if (this.reservedLabor() + def.labor > this.economy.laborCap) return false;
+    for (const e of this.world.query(C.Producer, C.Building)) {
+      if (this.world.has(e, C.Construction)) continue; // must be completed
+      const p = this.world.get<Producer>(e, C.Producer)!;
+      if (!p.trains.includes(kind)) continue;
+      this.economy.funds -= def.costFunds;
+      p.queue.push(kind);
+      return true;
+    }
+    return false;
+  }
+
+  /** Advance production queues; spawn finished units beside their building. */
+  private advanceProduction(dt: number): void {
+    for (const e of this.world.query(C.Producer, C.Transform)) {
+      if (this.world.has(e, C.Construction)) continue;
+      const p = this.world.get<Producer>(e, C.Producer)!;
+      if (p.queue.length === 0) continue;
+      const kind = p.queue[0];
+      p.progress += dt / UNITS[kind].trainTime;
+      if (p.progress >= 1) {
+        p.progress = 0;
+        p.queue.shift();
+        const t = this.world.get<Transform>(e, C.Transform)!;
+        const b = this.world.get<Building>(e, C.Building)!;
+        // Spawn just south of the building, on the nearest free tile.
+        const t0 = this.grid.worldToTileClamped(t.x, t.z - b.radius - 1.2);
+        const free = this.grid.nearestFree(t0.tx, t0.ty);
+        const spot = free
+          ? this.grid.tileToWorld(free.tx, free.ty)
+          : { x: t.x, z: t.z - b.radius - 1.2 };
+        this.spawnUnit(spot.x, spot.z, kind);
+      }
+    }
+  }
+
+  /** Production status of the first producer that trains `kind` (for the HUD). */
+  productionStatus(kind: UnitKind): { queue: number; progress: number } {
+    for (const e of this.world.query(C.Producer, C.Building)) {
+      if (this.world.has(e, C.Construction)) continue;
+      const p = this.world.get<Producer>(e, C.Producer)!;
+      if (!p.trains.includes(kind)) continue;
+      return { queue: p.queue.length, progress: p.queue.length > 0 ? p.progress : 0 };
+    }
+    return { queue: 0, progress: 0 };
+  }
+
   /** Assign units to help build an in-progress blueprint. */
   assignBuild(entities: Iterable<Entity>, buildingId: Entity): boolean {
     if (!this.world.isAlive(buildingId) || !this.world.has(buildingId, C.Construction)) {
@@ -293,7 +376,10 @@ export class GameSim {
     separationSystem(this.world, colliders);
     harvestSystem(this.world, this.grid, this.economy, TICK_DT);
     constructionSystem(this.world, this.grid, TICK_DT, (e) => this.completeBuilding(e));
-    this.economy.laborUsed = this.world.query(C.Unit).length;
+    this.advanceProduction(TICK_DT);
+    let labor = 0;
+    for (const e of this.world.query(C.Unit)) labor += UNITS[this.world.get<Unit>(e, C.Unit)!.kind].labor;
+    this.economy.laborUsed = labor;
     this.tick++;
   }
 

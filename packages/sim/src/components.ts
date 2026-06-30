@@ -107,6 +107,16 @@ export interface Builder {
   targetId: number; // building entity under construction
 }
 
+/** A building that trains units from a queue. */
+export interface Producer {
+  /** Unit kinds this building can train. */
+  trains: UnitKind[];
+  /** Queued unit kinds awaiting production. */
+  queue: UnitKind[];
+  /** Progress on the front queue item, 0..1. */
+  progress: number;
+}
+
 /** Player resource pools. */
 export interface Economy {
   funds: number;
@@ -127,4 +137,5 @@ export const C = {
   ResourceNode: "ResourceNode",
   Harvester: "Harvester",
   Builder: "Builder",
+  Producer: "Producer",
 } as const;

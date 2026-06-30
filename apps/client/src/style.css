@@ -177,6 +177,29 @@ body,
 .build-btn.dim {
   opacity: 0.4;
 }
+.build-btn {
+  position: relative;
+  overflow: hidden;
+}
+.build-btn .q {
+  color: #ffe24d;
+  font-weight: 700;
+}
+.build-btn .progbar {
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  height: 3px;
+  width: 100%;
+  background: rgba(255, 255, 255, 0.1);
+}
+.build-btn .progbar i {
+  display: block;
+  height: 100%;
+  width: 0;
+  background: #53ff7a;
+  transition: width 0.1s linear;
+}
 .build-btn .cost {
   font-size: 11px;
   color: #b9c2cc;

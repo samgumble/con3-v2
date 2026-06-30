@@ -1,18 +1,23 @@
 import "./style.css";
 import { GameView } from "@con3/engine";
-import { BUILDINGS, type BuildingKind, GameSim, TICK_DT, type Entity } from "@con3/sim";
+import {
+  BUILDINGS,
+  type BuildingKind,
+  GameSim,
+  TICK_DT,
+  UNITS,
+  type Entity,
+} from "@con3/sim";
 
 const app = document.getElementById("app")!;
 
 // --- Simulation -----------------------------------------------------------
 const sim = new GameSim();
 
-// Seed a starting crew in the clear northern yard (obstacles are to the south).
+// Seed a starting crew in the clear yard south of the HQ.
 for (let i = 0; i < 8; i++) {
-  sim.spawnUnit(-9 + i * 2.4, 7 + (i % 2) * 1.6, i % 3 === 0 ? "excavator" : "worker");
+  sim.spawnUnit(-9 + i * 2.4, 8 + (i % 2) * 1.6, i % 4 === 0 ? "excavator" : "worker");
 }
-sim.spawnUnit(-3, 11, "crane");
-sim.spawnUnit(3, 11, "crane");
 
 // --- Renderer -------------------------------------------------------------
 const view = new GameView(app);
@@ -79,6 +84,20 @@ function exitBuild(): void {
   view.hideGhost();
   for (const b of buildBtns.values()) b.classList.remove("active");
 }
+
+// --- Train (unit production) ---------------------------------------------
+const trainBtnsEl = document.querySelector("#buildbar .train-btns")!;
+const trainWorkerBtn = document.createElement("button");
+trainWorkerBtn.className = "build-btn";
+trainWorkerBtn.innerHTML =
+  `<span>Worker <span class="q" id="q-worker"></span></span>` +
+  `<span class="cost"><span class="f">${UNITS.worker.costFunds}</span></span>` +
+  `<div class="progbar"><i id="prog-worker"></i></div>`;
+trainWorkerBtn.addEventListener("click", () => sim.trainUnit("worker"));
+trainBtnsEl.appendChild(trainWorkerBtn);
+
+const qWorker = trainWorkerBtn.querySelector("#q-worker") as HTMLElement;
+const progWorker = trainWorkerBtn.querySelector("#prog-worker") as HTMLElement;
 
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
@@ -214,6 +233,11 @@ function updateHud(): void {
   for (const [kind, btn] of buildBtns) {
     btn.classList.toggle("dim", !sim.affordable(kind));
   }
+  const ws = sim.productionStatus("worker");
+  qWorker.textContent = ws.queue > 0 ? `(${ws.queue})` : "";
+  progWorker.style.width = `${ws.progress * 100}%`;
+  const canTrain = eco.funds >= UNITS.worker.costFunds && eco.laborUsed < eco.laborCap;
+  trainWorkerBtn.classList.toggle("dim", !canTrain);
 }
 
 window.addEventListener("resize", () => {
