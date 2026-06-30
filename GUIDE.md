@@ -20,7 +20,7 @@ and the game is won.
 
 The phase tracker is in the **top-left** of the screen. It shows the current
 phase, how many Materials and how much crew effort it still needs, and whether
-it's waiting on something (like a crane).
+it's waiting on something (like a concrete truck).
 
 ---
 
@@ -60,7 +60,7 @@ right one for the job.
 |------|-----------|------|-------|---------|-------|-------|--------|--------------|-------------|
 | **Worker** 🦺 | Field Office | 50 Funds | 1 | Residential | Fast | 8 | Normal | ×1 | ✅ |
 | **Excavator** 🚜 | Workshop | 120 Funds | 2 | Commercial | Slow | **24** | **Fast** | ×1.4 | ✅ |
-| **Crane** 🏗️ | Crane Yard | 200 Funds | 3 | Industrial | Slowest | — | **×2.5** | ✅ build only |
+| **Concrete Truck** 🚛 | Cement Factory | 200 Funds | 3 | Industrial | Slowest | — | **×2.5** | ✅ build only |
 
 **Worker** — your cheap, fast, flexible baseline. Good at everything, great at
 nothing. Hauls 8 Materials a trip. Use them for early gathering and general work,
@@ -71,13 +71,13 @@ mines faster, so a couple of excavators will out-supply a whole pack of workers.
 Slow on its feet and costs more, but it's how you keep the Materials flowing once
 the HQ's appetite grows. Also a solid builder.
 
-**Crane** — the **construction specialist**. It **cannot gather** at all — but it
-delivers huge build effort, and a crane **must be on-site for the tall HQ phases**
-(Superstructure → Roofing). No crane = those phases simply won't advance. Build a
-Crane Yard and train at least one crane *before* you reach the Superstructure
+**Concrete Truck** — the **construction specialist**. It **cannot gather** at all — but it
+delivers huge build effort, and a concrete truck **must be on-site for the tall HQ phases**
+(Superstructure → Roofing). No truck = those phases simply won't advance. Build a
+Cement Factory and train at least one concrete truck *before* you reach the Superstructure
 phase, or the whole project stalls.
 
-> **Rule of thumb:** Workers start the job, Excavators feed it, Cranes top it out.
+> **Rule of thumb:** Workers start the job, Excavators feed it, Concrete Trucks top it out.
 > Any unit can help build; only Workers and Excavators can gather.
 
 ---
@@ -96,7 +96,7 @@ Funds. Higher-tier buildings need a higher **license** (see below).
 | **Depot** | 70 Materials | Residential | Open storage yard: **+220 storage** and a **forward drop-off** that **stacks materials in plain view** — put it near the deposits to shorten the gather trip. Once built, **new gathered supplies flow into the Depot** while the Field Office's stock is **drained first** by your HQ crew, so the supply naturally "moves over" to the Depot. |
 | **Permit Office** | 100 Funds + 80 Materials | Residential | Generates **Permits** (+0.7/sec) for license upgrades. |
 | **Workshop** | 120 Funds + 120 Materials | Commercial | Trains **Excavators**. |
-| **Crane Yard** | 220 Funds + 180 Materials | Industrial | Trains **Cranes** (required to top out the HQ). |
+| **Cement Factory** | 220 Funds + 180 Materials | Industrial | Trains **Concrete Trucks** (required to top out the HQ). |
 
 ---
 
@@ -132,15 +132,15 @@ with the **Upgrade License** button (bottom-right), paying Funds + Permits.
 |---------|-------------|---------|
 | **Residential** | (starting tier) | Workers, Trailer, Depot, Permit Office |
 | **Commercial** | 200 Funds + 12 Permits | **Workshop → Excavators** |
-| **Industrial** | 400 Funds + 28 Permits | **Crane Yard → Cranes** |
+| **Industrial** | 400 Funds + 28 Permits | **Cement Factory → Concrete Trucks** |
 | **Skyscraper** | 800 Funds + 55 Permits | Top prestige license |
 
 You need to reach at least **Industrial** to finish the HQ, because the tall
-phases require a crane. Plan your permits early so you're not blocked later.
+phases require a concrete truck. Plan your permits early so you're not blocked later.
 
 > **Greyed-out buttons tell you why.** Any locked Train/Build button shows the
-> exact reason beneath it — e.g. a **Crane** says *"Build a Crane Yard first"*, a
-> **Crane Yard** says *"Build a Depot first (storage too small)"*, and others say
+> exact reason beneath it — e.g. a **Concrete Truck** says *"Build a Cement Factory first"*, a
+> **Cement Factory** says *"Build a Depot first (storage too small)"*, and others say
 > *"Needs Commercial license"*, *"Not enough materials"*, or *"Not enough funds"*.
 > Follow the chain and you'll always know your next step.
 
@@ -149,19 +149,19 @@ phases require a crane. Plan your permits early so you're not blocked later.
 ## 🏗️ The 12 HQ phases
 
 Each phase needs **Materials** + **crew effort**; finishing it pays **Funds**.
-Phases 6–9 (the tall structural work) **require a crane on-site**.
+Phases 6–9 (the tall structural work) **require a concrete truck on-site**.
 
-| # | Phase | Materials | Pays | Needs crane |
+| # | Phase | Materials | Pays | Needs concrete |
 |---|-------|-----------|------|:-----------:|
 | 1 | Site Prep | 20 | 💵 40 | |
 | 2 | Excavation | 30 | 💵 60 | |
 | 3 | Piling | 45 | 💵 90 | |
 | 4 | Foundation | 60 | 💵 130 | |
 | 5 | Substructure | 75 | 💵 160 | |
-| 6 | Superstructure | 95 | 💵 220 | 🏗️ |
-| 7 | Floor Slabs | 110 | 💵 240 | 🏗️ |
-| 8 | Façade & Cladding | 120 | 💵 260 | 🏗️ |
-| 9 | Roofing | 90 | 💵 220 | 🏗️ |
+| 6 | Superstructure | 95 | 💵 220 | 🚛 |
+| 7 | Floor Slabs | 110 | 💵 240 | 🚛 |
+| 8 | Façade & Cladding | 120 | 💵 260 | 🚛 |
+| 9 | Roofing | 90 | 💵 220 | 🚛 |
 | 10 | MEP & Services | 80 | 💵 200 | |
 | 11 | Interior Fit-out | 70 | 💵 200 | |
 | 12 | Inspection & Handover | 40 | 💵 300 | |
@@ -230,18 +230,18 @@ just moves — each with a coloured ping so you can see the order land.
    reinvest.
 6. **Upgrade to Commercial → build a Workshop → train Excavators** to scale up
    your Materials supply.
-7. **Upgrade to Industrial → build a Crane Yard → train a Crane** *before* you hit
-   the Superstructure phase. Don't let phase 6 catch you crane-less. Note the
-   Crane Yard costs **180 Materials** but your base storage is only 100 — so
+7. **Upgrade to Industrial → build a Cement Factory → train a Concrete Truck** *before* you hit
+   the Superstructure phase. Don't let phase 6 catch you truck-less. Note the
+   Cement Factory costs **180 Materials** but your base storage is only 100 — so
    **build a Depot first** (it raises the cap to 320) or you won't be able to
    bank enough to afford it.
 8. **Keep the Materials flowing** and push through phases 6–12 to top out the
    tower and win.
 
-> **Can't get stuck:** even if a phase is blocked (e.g. waiting on a crane),
+> **Can't get stuck:** even if a phase is blocked (e.g. waiting on a concrete truck),
 > deposits keep restocking, Permits keep trickling, and the monthly progress
 > payment keeps Funds growing — so you can always work your way toward the next
-> upgrade, building, or crane. It may take a while, but the project never
+> upgrade, building, or concrete truck. It may take a while, but the project never
 > dead-ends.
 
 Good luck — now go build something. 🏗️

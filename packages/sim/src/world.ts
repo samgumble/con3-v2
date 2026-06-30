@@ -64,14 +64,14 @@ export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   permitOffice: { radius: 2.0, buildTime: 10, costFunds: 100, costMaterials: 80, dropOff: false, providesLabor: 0, providesStorage: 0, trains: [], tier: 0, permitsPerSec: 0.7 },
   // Trains excavators (material specialists).
   workshop: { radius: 2.2, buildTime: 12, costFunds: 120, costMaterials: 120, dropOff: false, providesLabor: 0, providesStorage: 0, trains: ["excavator"], tier: 1, permitsPerSec: 0 },
-  // Trains cranes (required to top out the HQ).
-  craneYard: { radius: 2.4, buildTime: 16, costFunds: 220, costMaterials: 180, dropOff: false, providesLabor: 0, providesStorage: 0, trains: ["crane"], tier: 2, permitsPerSec: 0 },
+  // Batches concrete: trains concrete trucks (required to pour the tall HQ phases).
+  cementFactory: { radius: 2.4, buildTime: 16, costFunds: 220, costMaterials: 180, dropOff: false, providesLabor: 0, providesStorage: 0, trains: ["concreteTruck"], tier: 2, permitsPerSec: 0 },
 };
 
 /**
  * The HQ megaproject's construction phases. Each consumes materials + worker
  * effort, pays a Funds progress-payment on completion, and the tall structural
- * phases require a Crane on-site to advance.
+ * phases require a Concrete Truck on-site to pour.
  */
 export const PHASES: PhaseDef[] = [
   { name: "Site Prep", materials: 20, effort: 6, fundsReward: 40 },
@@ -79,10 +79,10 @@ export const PHASES: PhaseDef[] = [
   { name: "Piling", materials: 45, effort: 10, fundsReward: 90 },
   { name: "Foundation", materials: 60, effort: 12, fundsReward: 130 },
   { name: "Substructure", materials: 75, effort: 14, fundsReward: 160 },
-  { name: "Superstructure", materials: 95, effort: 18, fundsReward: 220, requiresCrane: true },
-  { name: "Floor Slabs", materials: 110, effort: 20, fundsReward: 240, requiresCrane: true },
-  { name: "Façade & Cladding", materials: 120, effort: 20, fundsReward: 260, requiresCrane: true },
-  { name: "Roofing", materials: 90, effort: 16, fundsReward: 220, requiresCrane: true },
+  { name: "Superstructure", materials: 95, effort: 18, fundsReward: 220, requiresConcrete: true },
+  { name: "Floor Slabs", materials: 110, effort: 20, fundsReward: 240, requiresConcrete: true },
+  { name: "Façade & Cladding", materials: 120, effort: 20, fundsReward: 260, requiresConcrete: true },
+  { name: "Roofing", materials: 90, effort: 16, fundsReward: 220, requiresConcrete: true },
   { name: "MEP & Services", materials: 80, effort: 18, fundsReward: 200 },
   { name: "Interior Fit-out", materials: 70, effort: 16, fundsReward: 200 },
   { name: "Inspection & Handover", materials: 40, effort: 12, fundsReward: 300 },
@@ -107,8 +107,9 @@ export const UNITS: Record<UnitKind, UnitDef> = {
   worker: { costFunds: 50, trainTime: 4, labor: 1, tier: 0, speed: 4, radius: 0.5, carry: 8, gatherTime: 1.6, buildPower: 1, megaEffort: 1, canGather: true },
   // Material specialist: big hauls + fast mining, decent builder.
   excavator: { costFunds: 120, trainTime: 7, labor: 2, tier: 1, speed: 2.6, radius: 0.8, carry: 24, gatherTime: 1.0, buildPower: 1.4, megaEffort: 1.4, canGather: true },
-  // Construction specialist: huge build effort, REQUIRED for tall HQ phases. No gathering.
-  crane: { costFunds: 200, trainTime: 9, labor: 3, tier: 2, speed: 1.6, radius: 1.0, carry: 0, gatherTime: 0, buildPower: 2.5, megaEffort: 3, canGather: false },
+  // Concrete specialist: pours huge structural effort, REQUIRED for the tall HQ
+  // phases. Delivers ready-mix (doesn't fetch raw materials).
+  concreteTruck: { costFunds: 200, trainTime: 9, labor: 3, tier: 2, speed: 1.6, radius: 1.0, carry: 0, gatherTime: 0, buildPower: 2.5, megaEffort: 3, canGather: false },
 };
 
 /** License tiers. Index 0 is the starting tier; cost is to REACH that tier. */
@@ -365,7 +366,7 @@ export class GameSim {
     });
   }
 
-  /** Assign gather-capable units to harvest a deposit (cranes can't gather). */
+  /** Assign gather-capable units to harvest a deposit (concrete trucks can't gather). */
   assignHarvest(entities: Iterable<Entity>, nodeId: Entity): void {
     if (!this.world.isAlive(nodeId)) return;
     for (const e of entities) {
@@ -659,7 +660,7 @@ export class GameSim {
     overall: number;
     crews: number;
     complete: boolean;
-    needsCrane: boolean; // current phase requires a crane and none is on-site
+    needsConcrete: boolean; // current phase needs a concrete truck and none is on-site
   } | null {
     const hq = this.hqEntity();
     if (!hq) return null;
@@ -670,10 +671,10 @@ export class GameSim {
       ? 1
       : Math.min(mp.phaseMaterials / phase.materials, mp.phaseEffort / phase.effort);
     let crews = 0;
-    let cranes = 0;
+    let trucks = 0;
     for (const e of this.world.query(C.MegaBuilder, C.Unit)) {
       crews++;
-      if (this.world.get<Unit>(e, C.Unit)!.kind === "crane") cranes++;
+      if (this.world.get<Unit>(e, C.Unit)!.kind === "concreteTruck") trucks++;
     }
     return {
       phaseIndex: done ? PHASES.length : mp.phaseIndex,
@@ -686,7 +687,7 @@ export class GameSim {
       overall: (mp.phaseIndex + (done ? 0 : phaseFrac)) / PHASES.length,
       crews,
       complete: done,
-      needsCrane: !done && phase.requiresCrane === true && cranes === 0,
+      needsConcrete: !done && phase.requiresConcrete === true && trucks === 0,
     };
   }
 
@@ -760,7 +761,7 @@ export class GameSim {
 
     // Monthly progress payment: a slow retainer so Funds keep growing even when
     // a phase is blocked — the player can always work toward the next upgrade /
-    // crane and never gets permanently stuck.
+    // concrete truck and never gets permanently stuck.
     this.monthTimer -= TICK_DT;
     if (this.monthTimer <= 0) {
       this.monthTimer += GAME_MONTH;

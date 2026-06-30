@@ -20,7 +20,7 @@ export interface PhaseDef {
   materials: number; // materials this phase consumes
   effort: number; // effort-seconds this phase requires
   fundsReward: number; // Funds paid out on completion (progress payment)
-  requiresCrane?: boolean; // tall phases need a Crane on-site to advance
+  requiresConcrete?: boolean; // tall phases need a concrete truck on-site to pour
 }
 
 function setPath(world: World, grid: NavGrid, e: Entity, tx: number, tz: number): void {
@@ -69,8 +69,8 @@ function nearestStock(world: World, x: number, z: number): Entity {
  * needs materials and the unit can haul, fetches a load from the nearest
  * stockpile (Field Office / Depot) and brings it back, or (c) otherwise stands
  * on-site and adds build effort. A phase completes once both its material and
- * effort targets are met; the tall phases need a crane on-site for effort to
- * accrue (cranes can't haul, so workers/excavators must keep them supplied).
+ * effort targets are met; the tall phases need a concrete truck on-site for
+ * effort to accrue (trucks can't haul, so workers/excavators keep them supplied).
  */
 export function megaprojectSystem(
   world: World,
@@ -95,7 +95,7 @@ export function megaprojectSystem(
   const phase = phases[mp.phaseIndex];
 
   let effortPower = 0;
-  let cranes = 0;
+  let trucks = 0;
   const needMat = mp.phaseMaterials < phase.materials;
 
   for (const e of world.query(C.MegaBuilder, C.Transform, C.Unit)) {
@@ -151,14 +151,14 @@ export function megaprojectSystem(
     if (atHQ) {
       world.remove(e, C.PathFollow);
       effortPower += u.megaEffort;
-      if (u.kind === "crane") cranes++;
+      if (u.kind === "concreteTruck") trucks++;
     } else if (!world.has(e, C.PathFollow)) {
       setPath(world, grid, e, ht.x, ht.z);
     }
   }
 
-  // Effort accrues unless a tall phase still lacks a crane on-site.
-  if (!(phase.requiresCrane && cranes === 0)) {
+  // Effort accrues unless a tall phase still lacks a concrete truck on-site.
+  if (!(phase.requiresConcrete && trucks === 0)) {
     mp.phaseEffort += effortPower * dt;
   }
 

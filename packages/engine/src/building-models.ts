@@ -63,7 +63,7 @@ const HEIGHT: Record<string, number> = {
   depot: 2.2,
   workshop: 2.4,
   permitOffice: 2.8,
-  craneYard: 2.0,
+  cementFactory: 2.6,
 };
 
 function buildFinished(kind: string, r: number, stockFrac = 0): THREE.Group {
@@ -167,32 +167,53 @@ function buildFinished(kind: string, r: number, stockFrac = 0): THREE.Group {
       g.add(box(1.0, 0.55, 0.1, YELLOW, r * 0.9, 1.35, r * 1.25));
       break;
     }
-    case "craneYard": {
-      // Heavy-equipment yard that assembles tower cranes.
+    case "cementFactory": {
+      // Concrete batching plant: cement silos, a mixing/batch tower, an
+      // aggregate conveyor + bins, and a control cabin.
       g.add(box(r * 1.95, 0.4, r * 1.95, STEEL, 0, 0.2, 0)); // concrete pad
-      g.add(box(r * 1.95, 0.06, 0.3, YELLOW, 0, 0.43, r * 0.85)); // hazard-stripe edge
-      // Compact lattice tower crane on the pad.
-      const bx = r * 0.35;
-      const bz = -r * 0.25;
-      g.add(box(1.0, 0.4, 1.0, STEEL, bx, 0.45, bz)); // ballast
-      const mh = 5.0;
-      const segs = 5;
-      for (let i = 0; i < segs; i++) g.add(box(0.34, mh / segs - 0.1, 0.34, YELLOW, bx, 0.65 + (i + 0.5) * (mh / segs), bz));
-      const ty = 0.65 + mh;
-      g.add(box(0.62, 0.55, 0.62, YELLOW, bx, ty, bz)); // slewing unit
-      g.add(box(0.5, 0.45, 0.55, DARK, bx + 0.1, ty + 0.45, bz + 0.4)); // operator cab
-      g.add(box(4.6, 0.18, 0.28, YELLOW, bx + 1.9, ty + 0.45, bz)); // working jib
-      g.add(box(1.6, 0.18, 0.28, YELLOW, bx - 0.9, ty + 0.45, bz)); // counter-jib
-      g.add(box(0.6, 0.7, 0.6, DARK, bx - 1.65, ty + 0.3, bz)); // counterweight
-      g.add(box(0.04, 1.8, 0.04, DARK, bx + 3.4, ty - 0.45, bz)); // hook line
-      g.add(box(0.26, 0.3, 0.26, DARK, bx + 3.4, ty - 1.45, bz)); // hook block
-      // Spare lattice mast sections stacked on the ground.
-      for (let i = 0; i < 3; i++) g.add(box(0.55, 0.5, 1.7, CATY, -r * 0.95, 0.5, -r * 0.55 - i * 0.62));
-      // Counterweight blocks.
-      for (let i = 0; i < 2; i++) g.add(box(1.0, 0.4, 0.7, DARK, -r * 1.1, 0.6 + i * 0.42, r * 0.75));
-      // Shipping container of rigging gear.
-      g.add(box(r * 0.95, 0.8, r * 0.6, BLUE, r * 0.75, 0.6, r * 0.95));
-      g.add(box(r * 0.97, 0.06, r * 0.62, DARK, r * 0.75, 1.0, r * 0.95));
+      g.add(box(r * 1.95, 0.06, 0.3, YELLOW, 0, 0.43, r * 0.85)); // hazard edge
+
+      // Two cement silos (conical hopper base → body → top filter cap, on legs).
+      for (const sx of [-r * 0.72, -r * 0.14]) {
+        const sz = -r * 0.5;
+        g.add(cyl(0.06, 0.42, 0.7, STEEL, sx, 0.95, sz, 12)); // hopper cone
+        g.add(cyl(0.55, 0.55, 3.2, 0xe2e3e0, sx, 2.95, sz, 14)); // silo body
+        g.add(cyl(0.58, 0.58, 0.18, YELLOW, sx, 1.7, sz, 14)); // hazard band
+        g.add(cyl(0.28, 0.56, 0.45, STEEL, sx, 4.75, sz, 14)); // top filter
+        for (const lx of [-0.5, 0.5]) g.add(box(0.07, 0.7, 0.07, STEEL, sx + lx, 0.6, sz)); // legs
+      }
+
+      // Mixing/batch tower (boxy frame) over the mixer at the base.
+      const tx = r * 0.72;
+      const tz = r * 0.2;
+      g.add(box(1.0, 0.85, 1.0, STEEL, tx, 0.73, tz)); // mixer housing
+      g.add(box(1.3, 2.3, 1.3, YELLOW, tx, 2.05, tz)); // batch tower
+      g.add(box(1.42, 0.26, 1.42, DARK, tx, 3.33, tz)); // tower top deck
+      g.add(box(0.5, 0.5, 0.06, GLASS, tx, 2.3, tz + 0.66)); // control window
+      g.add(cyl(0.46, 0.6, 0.5, STEEL, tx, 1.35, tz, 12)); // weigh hopper
+
+      // Inclined aggregate conveyor feeding the tower from the +z side.
+      const conv = box(0.5, 0.18, 2.7, DARK);
+      conv.rotation.x = -0.5;
+      conv.position.set(tx, 1.45, tz + 1.45);
+      g.add(conv);
+      const belt = box(0.6, 0.06, 2.7, 0x4a4f55);
+      belt.rotation.x = -0.5;
+      belt.position.set(tx, 1.52, tz + 1.45);
+      g.add(belt);
+      g.add(box(0.1, 1.0, 0.1, STEEL, tx, 0.5, tz + 2.35)); // conveyor leg
+
+      // Aggregate bins (loaded hoppers) at the conveyor foot.
+      for (let i = 0; i < 2; i++) {
+        const bx2 = tx - 0.45 + i * 0.9;
+        g.add(box(0.72, 0.6, 0.72, 0x6b5d4f, bx2, 0.5, tz + 2.4));
+        g.add(box(0.6, 0.3, 0.6, 0xc2a878, bx2, 0.92, tz + 2.4)); // aggregate heap
+      }
+
+      // Control cabin + roof.
+      g.add(box(0.95, 0.95, 0.9, BLUE, -r * 0.78, 0.68, r * 0.72));
+      g.add(box(1.0, 0.12, 0.95, DARK, -r * 0.78, 1.22, r * 0.72));
+      g.add(box(0.42, 0.42, 0.06, GLASS, -r * 0.78, 0.78, r * 0.72 + 0.46));
       break;
     }
     default: {
