@@ -39,7 +39,7 @@ jobs:
           NETLIFY_AUTH_TOKEN: ${{ secrets.NETLIFY_AUTH_TOKEN }}
           NETLIFY_SITE_ID: ${{ secrets.NETLIFY_SITE_ID }}
         run: >
-          pnpm dlx netlify-cli@17 deploy
+          pnpm --package=netlify-cli@17 dlx netlify deploy
           --dir=apps/client/dist
           --prod
           --message "CI deploy ${{ github.sha }}"
