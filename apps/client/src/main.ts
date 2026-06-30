@@ -355,11 +355,17 @@ function updateHud(): void {
     megaEff.style.width = pct(mp.effort / mp.effortReq);
     megaOverall.style.width = pct(mp.overall);
     megaPct.textContent = `${Math.round(mp.overall * 100)}%`;
-    megaHint.textContent = mp.complete
-      ? "Headquarters complete!"
-      : mp.crews > 0
-        ? `${mp.crews} crew on site`
-        : "Right-click the HQ with workers to build";
+    if (mp.needsCrane) {
+      megaHint.textContent = "⚠ This phase needs a Crane on site";
+      megaHint.classList.add("warn");
+    } else {
+      megaHint.classList.remove("warn");
+      megaHint.textContent = mp.complete
+        ? "Headquarters complete!"
+        : mp.crews > 0
+          ? `${mp.crews} crew on site`
+          : "Right-click the HQ with workers to build";
+    }
   }
 
   // Victory.
@@ -396,7 +402,7 @@ function updateHud(): void {
     statSelection.textContent = `${kindStr} · ${TASK_LABEL[topTask] ?? topTask}`;
   }
   resFunds.textContent = String(Math.floor(eco.funds));
-  resMaterials.textContent = String(Math.floor(eco.materials));
+  resMaterials.textContent = `${Math.floor(eco.materials)}/${eco.materialsCap}`;
   resLabor.textContent = `${eco.laborUsed}/${eco.laborCap}`;
   resPermits.textContent = String(Math.floor(eco.permits));
   resLicense.textContent = sim.licenseName();

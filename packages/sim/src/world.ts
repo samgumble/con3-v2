@@ -35,8 +35,6 @@ export const TICK_DT = 1 / TICK_RATE; // seconds per tick
 /** Half-extent of the playable area in world units. */
 export const MAP_HALF = 60;
 
-const SPEED: Record<UnitKind, number> = { worker: 4, excavator: 2.5, crane: 1.5 };
-const RADIUS: Record<UnitKind, number> = { worker: 0.5, excavator: 0.8, crane: 1.0 };
 
 export interface BuildingDef {
   radius: number;
@@ -45,6 +43,7 @@ export interface BuildingDef {
   costMaterials: number;
   dropOff: boolean; // accepts harvested materials
   providesLabor: number; // adds to labor cap when complete
+  providesStorage: number; // adds to materials storage cap when complete
   trains: UnitKind[]; // unit kinds this building can produce
   tier: number; // license tier required to build
   permitsPerSec: number; // permits generated while complete
@@ -53,29 +52,39 @@ export interface BuildingDef {
 export const BUILDINGS: Record<BuildingKind, BuildingDef> = {
   // The HQ is the central megaproject (built phase-by-phase), not an operations
   // building — it has no drop-off/training; the Field Office covers those.
-  hq: { radius: 3.6, buildTime: 0, costFunds: 0, costMaterials: 0, dropOff: false, providesLabor: 0, trains: [], tier: 0, permitsPerSec: 0 },
-  fieldOffice: { radius: 2.2, buildTime: 0, costFunds: 0, costMaterials: 0, dropOff: true, providesLabor: 20, trains: ["worker"], tier: 0, permitsPerSec: 0 },
-  trailer: { radius: 1.7, buildTime: 8, costFunds: 0, costMaterials: 60, dropOff: false, providesLabor: 8, trains: [], tier: 0, permitsPerSec: 0 },
-  depot: { radius: 1.9, buildTime: 8, costFunds: 0, costMaterials: 80, dropOff: true, providesLabor: 0, trains: [], tier: 0, permitsPerSec: 0 },
-  permitOffice: { radius: 2.0, buildTime: 10, costFunds: 100, costMaterials: 80, dropOff: false, providesLabor: 0, trains: [], tier: 0, permitsPerSec: 0.7 },
-  workshop: { radius: 2.2, buildTime: 12, costFunds: 120, costMaterials: 120, dropOff: false, providesLabor: 0, trains: ["excavator"], tier: 1, permitsPerSec: 0 },
-  craneYard: { radius: 2.4, buildTime: 16, costFunds: 220, costMaterials: 200, dropOff: false, providesLabor: 0, trains: ["crane"], tier: 2, permitsPerSec: 0 },
+  hq: { radius: 3.6, buildTime: 0, costFunds: 0, costMaterials: 0, dropOff: false, providesLabor: 0, providesStorage: 0, trains: [], tier: 0, permitsPerSec: 0 },
+  // Ops base: drop-off, trains workers, base labor + base storage.
+  fieldOffice: { radius: 2.2, buildTime: 0, costFunds: 0, costMaterials: 0, dropOff: true, providesLabor: 16, providesStorage: 100, trains: ["worker"], tier: 0, permitsPerSec: 0 },
+  // Housing: raises the labor cap so you can field more units.
+  trailer: { radius: 1.7, buildTime: 8, costFunds: 0, costMaterials: 60, dropOff: false, providesLabor: 10, providesStorage: 0, trains: [], tier: 0, permitsPerSec: 0 },
+  // Storage yard: big materials cap + a forward drop-off near the deposits.
+  depot: { radius: 1.9, buildTime: 8, costFunds: 0, costMaterials: 70, dropOff: true, providesLabor: 0, providesStorage: 220, trains: [], tier: 0, permitsPerSec: 0 },
+  // Generates permits for the tech tree.
+  permitOffice: { radius: 2.0, buildTime: 10, costFunds: 100, costMaterials: 80, dropOff: false, providesLabor: 0, providesStorage: 0, trains: [], tier: 0, permitsPerSec: 0.7 },
+  // Trains excavators (material specialists).
+  workshop: { radius: 2.2, buildTime: 12, costFunds: 120, costMaterials: 120, dropOff: false, providesLabor: 0, providesStorage: 0, trains: ["excavator"], tier: 1, permitsPerSec: 0 },
+  // Trains cranes (required to top out the HQ).
+  craneYard: { radius: 2.4, buildTime: 16, costFunds: 220, costMaterials: 180, dropOff: false, providesLabor: 0, providesStorage: 0, trains: ["crane"], tier: 2, permitsPerSec: 0 },
 };
 
-/** The HQ megaproject's construction phases (advanced by materials + effort). */
+/**
+ * The HQ megaproject's construction phases. Each consumes materials + worker
+ * effort, pays a Funds progress-payment on completion, and the tall structural
+ * phases require a Crane on-site to advance.
+ */
 export const PHASES: PhaseDef[] = [
-  { name: "Site Prep", materials: 20, effort: 6 },
-  { name: "Excavation", materials: 30, effort: 8 },
-  { name: "Piling", materials: 45, effort: 10 },
-  { name: "Foundation", materials: 60, effort: 12 },
-  { name: "Substructure", materials: 75, effort: 14 },
-  { name: "Superstructure", materials: 95, effort: 18 },
-  { name: "Floor Slabs", materials: 110, effort: 20 },
-  { name: "Façade & Cladding", materials: 120, effort: 20 },
-  { name: "Roofing", materials: 90, effort: 16 },
-  { name: "MEP & Services", materials: 80, effort: 18 },
-  { name: "Interior Fit-out", materials: 70, effort: 16 },
-  { name: "Inspection & Handover", materials: 40, effort: 12 },
+  { name: "Site Prep", materials: 20, effort: 6, fundsReward: 40 },
+  { name: "Excavation", materials: 30, effort: 8, fundsReward: 60 },
+  { name: "Piling", materials: 45, effort: 10, fundsReward: 90 },
+  { name: "Foundation", materials: 60, effort: 12, fundsReward: 130 },
+  { name: "Substructure", materials: 75, effort: 14, fundsReward: 160 },
+  { name: "Superstructure", materials: 95, effort: 18, fundsReward: 220, requiresCrane: true },
+  { name: "Floor Slabs", materials: 110, effort: 20, fundsReward: 240, requiresCrane: true },
+  { name: "Façade & Cladding", materials: 120, effort: 20, fundsReward: 260, requiresCrane: true },
+  { name: "Roofing", materials: 90, effort: 16, fundsReward: 220, requiresCrane: true },
+  { name: "MEP & Services", materials: 80, effort: 18, fundsReward: 200 },
+  { name: "Interior Fit-out", materials: 70, effort: 16, fundsReward: 200 },
+  { name: "Inspection & Handover", materials: 40, effort: 12, fundsReward: 300 },
 ];
 
 export interface UnitDef {
@@ -83,12 +92,22 @@ export interface UnitDef {
   trainTime: number; // seconds to produce
   labor: number; // labor cap consumed
   tier: number; // license tier required to train
+  speed: number;
+  radius: number;
+  carry: number; // materials per haul (0 = no gathering)
+  gatherTime: number;
+  buildPower: number; // support-building construction multiplier
+  megaEffort: number; // HQ megaproject effort multiplier
+  canGather: boolean;
 }
 
 export const UNITS: Record<UnitKind, UnitDef> = {
-  worker: { costFunds: 50, trainTime: 4, labor: 1, tier: 0 },
-  excavator: { costFunds: 120, trainTime: 7, labor: 2, tier: 1 },
-  crane: { costFunds: 200, trainTime: 9, labor: 3, tier: 2 },
+  // Cheap, fast, flexible baseline.
+  worker: { costFunds: 50, trainTime: 4, labor: 1, tier: 0, speed: 4, radius: 0.5, carry: 8, gatherTime: 1.6, buildPower: 1, megaEffort: 1, canGather: true },
+  // Material specialist: big hauls + fast mining, decent builder.
+  excavator: { costFunds: 120, trainTime: 7, labor: 2, tier: 1, speed: 2.6, radius: 0.8, carry: 24, gatherTime: 1.0, buildPower: 1.4, megaEffort: 1.4, canGather: true },
+  // Construction specialist: huge build effort, REQUIRED for tall HQ phases. No gathering.
+  crane: { costFunds: 200, trainTime: 9, labor: 3, tier: 2, speed: 1.6, radius: 1.0, carry: 0, gatherTime: 0, buildPower: 2.5, megaEffort: 3, canGather: false },
 };
 
 /** License tiers. Index 0 is the starting tier; cost is to REACH that tier. */
@@ -148,7 +167,6 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-const HARVEST_KINDS: ReadonlySet<UnitKind> = new Set<UnitKind>(["worker", "excavator"]);
 
 /**
  * Owns the ECS world, the navigation grid, the player economy, and advances the
@@ -161,6 +179,7 @@ export class GameSim {
   readonly economy: Economy = {
     funds: 500,
     materials: 0,
+    materialsCap: 0,
     laborUsed: 0,
     laborCap: 0,
     permits: 0,
@@ -254,19 +273,30 @@ export class GameSim {
     return e;
   }
 
-  /** Finish a building: register drop-off, grant labor cap. */
+  /** Finish a building: register drop-off, grant labor + storage cap. */
   completeBuilding(e: Entity): void {
     const b = this.world.get<Building>(e, C.Building)!;
     const def = BUILDINGS[b.kind];
     this.world.remove(e, C.Construction);
     if (def.dropOff) this.world.add(e, C.DropOff, {});
     this.economy.laborCap += def.providesLabor;
+    this.economy.materialsCap += def.providesStorage;
   }
 
   spawnUnit(x: number, z: number, kind: UnitKind = "worker"): Entity {
+    const def = UNITS[kind];
     const e = this.world.create();
     this.world.add<Transform>(e, C.Transform, { x, z, rot: 0 });
-    this.world.add<Unit>(e, C.Unit, { kind, speed: SPEED[kind], radius: RADIUS[kind] });
+    this.world.add<Unit>(e, C.Unit, {
+      kind,
+      speed: def.speed,
+      radius: def.radius,
+      carry: def.carry,
+      gatherTime: def.gatherTime,
+      buildPower: def.buildPower,
+      megaEffort: def.megaEffort,
+      canGather: def.canGather,
+    });
     this.world.add<Selectable>(e, C.Selectable, { selected: false });
     this.world.add<Owner>(e, C.Owner, { player: 0 });
     return e;
@@ -299,12 +329,12 @@ export class GameSim {
     });
   }
 
-  /** Assign capable units to harvest a deposit. */
+  /** Assign gather-capable units to harvest a deposit (cranes can't gather). */
   assignHarvest(entities: Iterable<Entity>, nodeId: Entity): void {
     if (!this.world.isAlive(nodeId)) return;
     for (const e of entities) {
       const u = this.world.get<Unit>(e, C.Unit);
-      if (!u || !HARVEST_KINDS.has(u.kind)) continue;
+      if (!u || !u.canGather) continue;
       this.world.remove(e, C.Builder);
       this.world.remove(e, C.MegaBuilder);
       this.world.remove(e, C.PathFollow);
@@ -313,24 +343,21 @@ export class GameSim {
         nodeId,
         dropId: 0,
         carrying: 0,
-        capacity: 12,
+        capacity: u.carry,
         timer: 0,
       });
     }
   }
 
-  /** Worker/excavator units with no current task (idle). */
+  /** Units with no current task (idle). */
   idleWorkers(): Entity[] {
-    return this.world.query(C.Unit).filter((e) => {
-      const u = this.world.get<Unit>(e, C.Unit)!;
-      if (!HARVEST_KINDS.has(u.kind)) return false;
-      return (
+    return this.world.query(C.Unit).filter(
+      (e) =>
         !this.world.has(e, C.Harvester) &&
         !this.world.has(e, C.Builder) &&
         !this.world.has(e, C.MegaBuilder) &&
-        !this.world.has(e, C.PathFollow)
-      );
-    });
+        !this.world.has(e, C.PathFollow),
+    );
   }
 
   /** Whether a building of `kind` fits at (x, z) without overlapping anything. */
@@ -403,9 +430,9 @@ export class GameSim {
     this.economy.materials -= def.costMaterials;
     const e = this.spawnBuilding(kind, x, z, false);
     for (const b of builders) {
-      const u = this.world.get<Unit>(b, C.Unit);
-      if (!u || !HARVEST_KINDS.has(u.kind)) continue; // workers/excavators build
+      if (!this.world.has(b, C.Unit)) continue; // any unit can build
       this.world.remove(b, C.Harvester);
+      this.world.remove(b, C.MegaBuilder);
       this.world.remove(b, C.PathFollow);
       this.world.add<Builder>(b, C.Builder, { targetId: e });
     }
@@ -533,9 +560,9 @@ export class GameSim {
     }
     let any = false;
     for (const e of entities) {
-      const u = this.world.get<Unit>(e, C.Unit);
-      if (!u || !HARVEST_KINDS.has(u.kind)) continue;
+      if (!this.world.has(e, C.Unit)) continue; // any unit can build
       this.world.remove(e, C.Harvester);
+      this.world.remove(e, C.MegaBuilder);
       this.world.remove(e, C.PathFollow);
       this.world.add<Builder>(e, C.Builder, { targetId: buildingId });
       any = true;
@@ -543,12 +570,11 @@ export class GameSim {
     return any;
   }
 
-  /** Assign units to work the central megaproject (the HQ). */
+  /** Assign units to work the central megaproject (the HQ). Any unit can help. */
   assignMegaBuild(entities: Iterable<Entity>): boolean {
     let any = false;
     for (const e of entities) {
-      const u = this.world.get<Unit>(e, C.Unit);
-      if (!u || !HARVEST_KINDS.has(u.kind)) continue;
+      if (!this.world.has(e, C.Unit)) continue;
       this.world.remove(e, C.Harvester);
       this.world.remove(e, C.Builder);
       this.world.remove(e, C.PathFollow);
@@ -576,6 +602,7 @@ export class GameSim {
     overall: number;
     crews: number;
     complete: boolean;
+    needsCrane: boolean; // current phase requires a crane and none is on-site
   } | null {
     const hq = this.hqEntity();
     if (!hq) return null;
@@ -586,7 +613,11 @@ export class GameSim {
       ? 1
       : Math.min(mp.phaseMaterials / phase.materials, mp.phaseEffort / phase.effort);
     let crews = 0;
-    for (const e of this.world.query(C.MegaBuilder)) crews += this.world.isAlive(e) ? 1 : 0;
+    let cranes = 0;
+    for (const e of this.world.query(C.MegaBuilder, C.Unit)) {
+      crews++;
+      if (this.world.get<Unit>(e, C.Unit)!.kind === "crane") cranes++;
+    }
     return {
       phaseIndex: done ? PHASES.length : mp.phaseIndex,
       totalPhases: PHASES.length,
@@ -598,6 +629,7 @@ export class GameSim {
       overall: (mp.phaseIndex + (done ? 0 : phaseFrac)) / PHASES.length,
       crews,
       complete: done,
+      needsCrane: !done && phase.requiresCrane === true && cranes === 0,
     };
   }
 

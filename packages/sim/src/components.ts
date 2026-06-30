@@ -33,13 +33,23 @@ export interface PathFollow {
   vz: number;
 }
 
-/** Marks a controllable unit and its movement profile. */
+/** Marks a controllable unit, its movement profile, and its work abilities. */
 export interface Unit {
   kind: UnitKind;
   /** Ground speed in world units per second. */
   speed: number;
   /** Collision/selection radius in world units. */
   radius: number;
+  /** Materials carried per haul trip (0 = cannot gather). */
+  carry: number;
+  /** Seconds to fill up at a deposit. */
+  gatherTime: number;
+  /** Effort multiplier when constructing support buildings. */
+  buildPower: number;
+  /** Effort multiplier when working the HQ megaproject. */
+  megaEffort: number;
+  /** Whether this unit can gather from deposits. */
+  canGather: boolean;
 }
 
 /** Selection state for player-controlled entities. */
@@ -151,6 +161,8 @@ export interface Producer {
 export interface Economy {
   funds: number;
   materials: number;
+  /** Storage cap on materials (raised by the Field Office + Depots). */
+  materialsCap: number;
   laborUsed: number;
   laborCap: number;
   /** Tech-gate currency earned over time / from Permit Offices. */

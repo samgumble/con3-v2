@@ -12,7 +12,6 @@ import {
 import type { NavGrid } from "../grid";
 import { findPath } from "../pathfind";
 
-const MINE_TIME = 1.6; // seconds to fill up at a deposit
 const UNLOAD_TIME = 0.6; // seconds to deposit at a drop-off
 const REACH = 1.2; // slack beyond summed radii to count as "arrived"
 
@@ -103,7 +102,7 @@ export function harvestSystem(
         if (dist <= nr.radius + u.radius + REACH) {
           world.remove(e, C.PathFollow);
           h.state = "mining";
-          h.timer = MINE_TIME;
+          h.timer = u.gatherTime; // excavators mine faster
         } else if (!world.has(e, C.PathFollow)) {
           setPath(world, grid, e, nt.x, nt.z);
         }
@@ -165,7 +164,9 @@ export function harvestSystem(
       case "unloading": {
         h.timer -= dt;
         if (h.timer <= 0) {
-          economy.materials += h.carrying * yieldMul; // shortage halves yield
+          // Deposit into the yard, clamped to storage capacity (excess is lost).
+          const gained = h.carrying * yieldMul; // shortage halves yield
+          economy.materials = Math.min(economy.materialsCap, economy.materials + gained);
           h.carrying = 0;
           const node = h.nodeId && world.isAlive(h.nodeId) ? h.nodeId : nearestNode(world, t.x, t.z);
           h.nodeId = node;

@@ -306,6 +306,10 @@ body,
   font-size: 11px;
   color: #7f8b97;
 }
+.mega-hint.warn {
+  color: #ff8a3c;
+  font-weight: 700;
+}
 
 #victory {
   position: fixed;

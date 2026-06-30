@@ -17,7 +17,9 @@ const MAT_DELIVERY_PER_CREW = 6; // materials/sec drawn from the yard per crew
 export interface PhaseDef {
   name: string;
   materials: number; // materials this phase consumes
-  effort: number; // worker-seconds this phase requires
+  effort: number; // effort-seconds this phase requires
+  fundsReward: number; // Funds paid out on completion (progress payment)
+  requiresCrane?: boolean; // tall phases need a Crane on-site to advance
 }
 
 function setPath(world: World, grid: NavGrid, e: Entity, tx: number, tz: number): void {
@@ -65,32 +67,41 @@ export function megaprojectSystem(
   const ht = world.get<Transform>(hq, C.Transform)!;
   const hb = world.get<Building>(hq, C.Building)!;
 
-  // Route builders to the site and count those on-site.
-  let crews = 0;
+  // Route builders to the site; tally on-site crews, their combined effort, and
+  // how many are cranes (needed for the tall phases).
+  let onSite = 0;
+  let effortPower = 0;
+  let cranes = 0;
   for (const e of world.query(C.MegaBuilder, C.Transform, C.Unit)) {
     const t = world.get<Transform>(e, C.Transform)!;
     const u = world.get<Unit>(e, C.Unit)!;
     const dist = Math.hypot(ht.x - t.x, ht.z - t.z);
     if (dist <= hb.radius + u.radius + REACH) {
       world.remove(e, C.PathFollow); // stop and work
-      crews++;
+      onSite++;
+      effortPower += u.megaEffort;
+      if (u.kind === "crane") cranes++;
     } else if (!world.has(e, C.PathFollow)) {
       setPath(world, grid, e, ht.x, ht.z);
     }
   }
-  if (crews === 0) return;
+  if (onSite === 0) return;
 
   const phase = phases[mp.phaseIndex];
-  mp.phaseEffort += crews * dt;
+  // Tall phases can't progress without a crane on-site.
+  if (phase.requiresCrane && cranes === 0) return;
+
+  mp.phaseEffort += effortPower * dt;
 
   const need = phase.materials - mp.phaseMaterials;
   if (need > 0 && economy.materials > 0) {
-    const take = Math.min(need, economy.materials, MAT_DELIVERY_PER_CREW * crews * dt);
+    const take = Math.min(need, economy.materials, MAT_DELIVERY_PER_CREW * onSite * dt);
     economy.materials -= take;
     mp.phaseMaterials += take;
   }
 
   if (mp.phaseEffort >= phase.effort && mp.phaseMaterials >= phase.materials) {
+    economy.funds += phase.fundsReward; // progress payment
     mp.phaseIndex++;
     mp.phaseEffort = 0;
     mp.phaseMaterials = 0;

@@ -65,7 +65,7 @@ export function constructionSystem(
 
     if (dist <= bb.radius + u.radius + REACH) {
       world.remove(e, C.PathFollow); // stop and work
-      effort.set(target, (effort.get(target) ?? 0) + dt);
+      effort.set(target, (effort.get(target) ?? 0) + u.buildPower * dt);
     } else if (!world.has(e, C.PathFollow)) {
       setPath(world, grid, e, bt.x, bt.z);
     }
