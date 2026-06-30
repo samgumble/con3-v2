@@ -16,12 +16,18 @@ Permits to raise your license tier, place support buildings, survive hazard
 events) exists to feed that central build. Single-player vs. environment for now;
 the sim is built to add an AI opponent / netcode later.
 
-**Core loop:** select workers → right-click a material **deposit** to gather →
-they haul to the **Field Office** (drop-off) → right-click the **HQ** to send
-crews there → on-site crews spend the yard's Materials + their effort to advance
-HQ phases → complete all 12 phases to win. Permits (passive + Permit Office)
-raise your **license tier**, unlocking the Workshop (excavators) and Crane Yard
-(cranes). Random **hazards** (rain/OSHA/shortage/strike) periodically disrupt you.
+**Core loop:** gather Materials from **deposits** → haul to **Field Office/Depot**
+(drop-off) → right-click the **HQ** to send crews → on-site crews spend the yard's
+Materials + effort to advance HQ phases → completing each phase **pays Funds**
+(progress payments) which fund expansion → finish all 12 phases to win. Materials
+are **capped by storage** (build Depots to bank more). Permits raise your
+**license tier**, unlocking the Workshop (excavators) and Crane Yard (cranes).
+Random **hazards** periodically disrupt you.
+
+**Unit roles (distinct):** Worker = cheap/fast/flexible baseline. Excavator =
+material specialist (3× carry, faster mining). Crane = construction specialist
+(3× build effort, **required on-site for the tall HQ phases** — Superstructure
+through Roofing; cannot gather). Any unit can build; only gatherers harvest.
 
 ---
 
@@ -119,10 +125,15 @@ octile, binary heap, no corner-cutting). `spatial-hash.ts` = neighbor queries.
   permitsPerSec. Kinds: hq (megaproject, no ops), fieldOffice (ops base: dropoff
   + trains worker + 20 labor, pre-built), trailer, depot, permitOffice,
   workshop(tier1, excavators), craneYard(tier2, cranes).
-- `UNITS` — costFunds, trainTime, labor, tier. (worker 1 labor/t0, excavator
-  2/t1, crane 3/t2.)
-- `PHASES` — the 12 HQ phases `{name,materials,effort}` (~835 mats / ~170
-  worker-seconds total).
+- `UNITS` — costFunds, trainTime, labor, tier, **speed, radius, carry, gatherTime,
+  buildPower, megaEffort, canGather** (the per-kind role stats; copied onto the
+  `Unit` component at spawn). worker(carry 8), excavator(carry 24, t1),
+  crane(no gather, 3× megaEffort, t2).
+- `PHASES` — the 12 HQ phases `{name,materials,effort,fundsReward,requiresCrane?}`
+  (~835 mats / ~170 effort-seconds total; tall phases 5–8 require a crane on-site).
+- `providesStorage` on `BUILDINGS` (Field Office 100, Depot 220) → `economy.materialsCap`.
+  Gathering past the cap wastes materials. Funds come from `fundsReward` on phase
+  completion (no passive funds source otherwise).
 - `LICENSE_TIERS` — Residential→Commercial→Industrial→Skyscraper upgrade costs
   (funds+permits). `BASE_PERMIT_RATE`.
 - `HAZARDS` — 4 events with duration + `Mods` partials.
@@ -201,12 +212,14 @@ Q/E=rotate · wheel=zoom · Esc=cancel build.
 
 **Done & live:** Phases 0–3 (engine, pathfinding/avoidance, economy/build/
 production, permits/tiers/hazards) + megaproject pivot + jitter fix + 2 art
-passes + RTS gameplay polish.
+passes + RTS gameplay polish + **distinct unit roles & economy loop** (storage
+cap, funds-from-phases, crane-gated tall phases) + **CAT-dashboard HUD re-skin**.
 
-**Rough edges / TODO ideas:** no audio; no save/load (refresh resets); deposits
-are ~24u from base (hauling is deliberately a grind); support-building rally
-points not implemented; buildings other than HQ/Field Office are decent but not
-deeply detailed; megaproject balance (~835 mats) untuned against real playthroughs.
+**Rough edges / TODO ideas:** no audio; no save/load (refresh resets); HUD font
+loads from Google Fonts (CDN dependency; falls back to system condensed);
+support-building rally points not implemented; full-playthrough balance
+(~835 mats, funds payouts, tier pacing) not yet tuned against real games;
+buildings other than HQ/Field Office are decent but not deeply detailed.
 
 **Next options:** Phase 4 — **AI opponent** (rival firm racing its own
 megaproject; `Owner` component + per-player economies are the foundation; would
@@ -216,6 +229,9 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- CAT-dashboard HUD re-skin (brushed steel, rivets, hazard stripes, LED type).
+- Gameplay depth: distinct unit roles (worker/excavator/crane) + economy loop
+  (material storage cap, Funds from HQ phase completions, crane-gated tall phases).
 - Gameplay polish: command markers, control groups, double-click, idle-worker
   tools, selection info panel, carry-capacity balance.
 - Art pass 2: refined units (hi-vis worker / CAT excavator / mobile crane) +
