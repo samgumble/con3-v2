@@ -262,6 +262,13 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- Worker effort animation: on-site units assigned to a build (`task` `build`/`mega`
+  and no longer moving) now play a rhythmic heave — a forward hammer/dig lean +
+  bob — and puff debris on each downstroke, with welding sparks for crews on the
+  HQ's structural phases (5–9). Threaded the snapshot's `task` field through
+  `RenderUnit`/`UnitVisual` into the render loop (game-view.ts); no sim change.
+  Also thinned the old dense HQ area-dust (was a 120/s white blob) now that each
+  worker carries the close-up effort signal.
 - Support-building art pass (#24 DONE): each of trailer/depot/permitOffice/
   workshop/craneYard now has a distinct, detailed mesh in `building-models.ts`
   (`buildFinished`) — stacked accommodation cabins, open canopy + timber/pipe

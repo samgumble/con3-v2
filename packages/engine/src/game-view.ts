@@ -19,6 +19,9 @@ export interface RenderUnit {
   radius: number;
   selected: boolean;
   carrying?: number; // materials being hauled (shows a load on the unit)
+  /** What the unit is doing: 'idle'|'move'|'gather'|'build'|'mega'. Drives the
+   * work animation — a stationary 'build'/'mega' unit is heaving into a job. */
+  task?: string;
 }
 
 /** Static map obstacle to render (rock pile or material stockpile). */
@@ -77,6 +80,7 @@ interface UnitVisual {
   curRot: number;
   selected: boolean;
   carrying: number;
+  task: string;
   seen: boolean;
 }
 
@@ -683,6 +687,7 @@ export class GameView {
           curRot: u.rot,
           selected: u.selected,
           carrying: u.carrying ?? 0,
+          task: u.task ?? "idle",
           seen: true,
         };
         this.visuals.set(u.id, v);
@@ -697,6 +702,7 @@ export class GameView {
         v.radius = u.radius;
         v.selected = u.selected;
         v.carrying = u.carrying ?? 0;
+        v.task = u.task ?? "idle";
         v.seen = true;
       }
     }
@@ -741,17 +747,31 @@ export class GameView {
       const z = v.prevZ + (v.curZ - v.prevZ) * alpha;
       const rot = lerpAngle(v.prevRot, v.curRot, alpha);
       const moving = Math.abs(v.curX - v.prevX) + Math.abs(v.curZ - v.prevZ) > 0.005;
-      // Liveliness: walkers bounce, vehicles jostle, everything idle-sways.
+      // A stationary unit assigned to a build/HQ job is on-site putting in effort.
+      const working = !moving && (v.task === "build" || v.task === "mega");
+      // workStroke: a rhythmic swing that drives the heave + debris puffs.
+      const workStroke = working ? Math.sin(this.elapsed * 7.5 + id * 2.1) : 0;
+      const workDown = Math.max(0, workStroke); // 0 between strokes, 1 at the strike
+      // Liveliness: walkers bounce, on-the-job crews heave into it, idle units sway.
       const amp = v.kind === "worker" ? 0.07 : 0.03;
-      const bob = moving
-        ? Math.abs(Math.sin(this.elapsed * 9 + id * 1.7)) * amp
-        : Math.sin(this.elapsed * 1.6 + id) * 0.012;
+      let bob: number;
+      let leanX: number;
+      if (moving) {
+        bob = Math.abs(Math.sin(this.elapsed * 9 + id * 1.7)) * amp;
+        leanX = Math.sin(this.elapsed * 9 + id * 1.7) * 0.04;
+      } else if (working) {
+        // Heave forward + down on each stroke (hammer / dig), then recover.
+        bob = workDown * (v.kind === "worker" ? 0.05 : 0.025);
+        leanX = -workDown * (v.kind === "worker" ? 0.45 : v.kind === "excavator" ? 0.3 : 0.16);
+      } else {
+        bob = Math.sin(this.elapsed * 1.6 + id) * 0.012;
+        leanX = 0;
+      }
 
       const mesh = this.kindMeshes.get(v.kind);
       if (mesh) {
         const idx = counters.get(v.kind)!;
-        const tilt = moving ? Math.sin(this.elapsed * 9 + id * 1.7) * 0.04 : 0;
-        this.quat.setFromEuler(this.euler.set(tilt, rot, 0));
+        this.quat.setFromEuler(this.euler.set(leanX, rot, 0));
         this.pos.set(x, bob, z);
         this.m4.compose(this.pos, this.quat, this.unitScale);
         mesh.setMatrixAt(idx, this.m4);
@@ -781,6 +801,24 @@ export class GameView {
           0.7 + Math.random() * 0.6, 0.86, 0.82, 0.74, 0.6 + Math.random() * 0.4,
         );
       }
+
+      // Effort feedback: a puff of debris on each downstroke while a crew works,
+      // plus welding sparks for crews up on the HQ's structural phases.
+      if (working) {
+        if (workStroke > 0.8 && Math.random() < 0.5) {
+          this.dust.spawn(
+            x + (Math.random() - 0.5) * 0.8, 0.16, z + (Math.random() - 0.5) * 0.8,
+            (Math.random() - 0.5) * 0.5, 0.4 + Math.random() * 0.5, (Math.random() - 0.5) * 0.5,
+            0.5 + Math.random() * 0.5, 0.88, 0.84, 0.76, 0.45 + Math.random() * 0.4,
+          );
+        }
+        if (v.task === "mega" && this.hqPhase >= 5 && this.hqPhase <= 9 && Math.random() < 0.22) {
+          this.sparks.burst(
+            x + (Math.random() - 0.5) * 0.6, v.radius * 1.5 + 0.6, z + (Math.random() - 0.5) * 0.6,
+            5, 2.2, 4, 0.2, 1.0, 0.85, 0.35, 0.4,
+          );
+        }
+      }
     }
 
     for (const [kind, mesh] of this.kindMeshes) {
@@ -797,21 +835,22 @@ export class GameView {
       if (bv.crane) bv.crane.rotation.y = this.elapsed * 0.12;
     }
 
-    // Construction dust + welding sparks at the HQ while crews are on it.
+    // Light construction haze drifting up off the HQ while crews are on it —
+    // kept sparse now that each on-site worker puffs its own debris (above).
     if (this.hqActive && this.hqPos) {
       const p = this.hqPos;
-      for (let k = 0; k < 2; k++) {
+      if (Math.random() < 0.5) {
         this.dust.spawn(
-          p.x + (Math.random() - 0.5) * 5, 0.2 + Math.random() * 2.5, p.z + (Math.random() - 0.5) * 5,
-          (Math.random() - 0.5) * 0.6, 0.5 + Math.random() * 0.8, (Math.random() - 0.5) * 0.6,
-          1.0 + Math.random() * 0.9, 0.9, 0.87, 0.8, 1.1 + Math.random() * 0.7,
+          p.x + (Math.random() - 0.5) * 5, 0.8 + Math.random() * 2.6, p.z + (Math.random() - 0.5) * 5,
+          (Math.random() - 0.5) * 0.5, 0.4 + Math.random() * 0.7, (Math.random() - 0.5) * 0.5,
+          0.6 + Math.random() * 0.6, 0.9, 0.87, 0.8, 1.0 + Math.random() * 0.7,
         );
       }
-      // Structural phases (5–9): showers of welding sparks up on the frame.
-      if (this.hqPhase >= 5 && this.hqPhase <= 9 && Math.random() < 0.7) {
+      // Structural phases (5–9): welding sparks raining off the rising frame.
+      if (this.hqPhase >= 5 && this.hqPhase <= 9 && Math.random() < 0.5) {
         this.sparks.burst(
           p.x + (Math.random() - 0.5) * 4, 2 + Math.random() * 6, p.z + (Math.random() - 0.5) * 4,
-          9, 3.5, 5, 0.26, 1.0, 0.85, 0.35, 0.5,
+          7, 3.5, 5, 0.24, 1.0, 0.85, 0.35, 0.5,
         );
       }
     }
