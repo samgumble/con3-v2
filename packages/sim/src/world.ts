@@ -86,6 +86,46 @@ export const LICENSE_TIERS: LicenseTier[] = [
 /** Base permit trickle so progress is possible even without a Permit Office. */
 const BASE_PERMIT_RATE = 0.1;
 
+/** Global effect modifiers, altered by active hazards. */
+interface Mods {
+  speed: number; // worker movement multiplier
+  gatherYield: number; // materials-per-deposit multiplier
+  buildAllowed: boolean; // construction progresses
+  produceAllowed: boolean; // unit production progresses
+  harvestAllowed: boolean; // gathering runs
+}
+
+function defaultMods(): Mods {
+  return { speed: 1, gatherYield: 1, buildAllowed: true, produceAllowed: true, harvestAllowed: true };
+}
+
+export type HazardKind = "rain" | "osha" | "shortage" | "strike";
+
+export interface HazardDef {
+  kind: HazardKind;
+  name: string;
+  desc: string;
+  duration: number; // seconds
+  mods: Partial<Mods>;
+}
+
+export const HAZARDS: HazardDef[] = [
+  { kind: "rain", name: "Rainstorm", desc: "Crews slowed, construction halted", duration: 18, mods: { speed: 0.55, buildAllowed: false } },
+  { kind: "osha", name: "OSHA Inspection", desc: "Unit production halted", duration: 14, mods: { produceAllowed: false } },
+  { kind: "shortage", name: "Material Shortage", desc: "Deposits yield halved", duration: 20, mods: { gatherYield: 0.5 } },
+  { kind: "strike", name: "Labor Strike", desc: "Workers stop gathering", duration: 16, mods: { harvestAllowed: false } },
+];
+
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 const HARVEST_KINDS: ReadonlySet<UnitKind> = new Set<UnitKind>(["worker", "excavator"]);
 
 /**
@@ -105,6 +145,12 @@ export class GameSim {
     tier: 0,
   };
   tick = 0;
+
+  // Hazard state.
+  private mods: Mods = defaultMods();
+  private activeHazard: { def: HazardDef; timeLeft: number } | null = null;
+  private readonly rng = mulberry32(0x9e3779b9);
+  private nextHazardIn = 45 + this.rng() * 30; // first event ~45–75s in
 
   constructor() {
     this.spawnObstacles();
@@ -357,8 +403,35 @@ export class GameSim {
     return false;
   }
 
+  /** Tick the hazard scheduler: run the active hazard or count down to the next. */
+  private advanceHazards(dt: number): void {
+    if (this.activeHazard) {
+      this.activeHazard.timeLeft -= dt;
+      if (this.activeHazard.timeLeft <= 0) {
+        this.activeHazard = null;
+        this.mods = defaultMods();
+        this.nextHazardIn = 35 + this.rng() * 40; // 35–75s between events
+      }
+    } else {
+      this.nextHazardIn -= dt;
+      if (this.nextHazardIn <= 0) {
+        const def = HAZARDS[Math.floor(this.rng() * HAZARDS.length)];
+        this.activeHazard = { def, timeLeft: def.duration };
+        this.mods = { ...defaultMods(), ...def.mods };
+      }
+    }
+  }
+
+  /** Active hazard for the HUD, or null. */
+  hazardStatus(): { kind: HazardKind; name: string; desc: string; timeLeft: number } | null {
+    if (!this.activeHazard) return null;
+    const d = this.activeHazard.def;
+    return { kind: d.kind, name: d.name, desc: d.desc, timeLeft: Math.ceil(this.activeHazard.timeLeft) };
+  }
+
   /** Advance production queues; spawn finished units beside their building. */
   private advanceProduction(dt: number): void {
+    if (!this.mods.produceAllowed) return; // e.g. OSHA inspection
     for (const e of this.world.query(C.Producer, C.Transform)) {
       if (this.world.has(e, C.Construction)) continue;
       const p = this.world.get<Producer>(e, C.Producer)!;
@@ -439,11 +512,21 @@ export class GameSim {
 
   /** Advance exactly one fixed tick. */
   step(): void {
+    this.advanceHazards(TICK_DT);
     const colliders = this.colliders();
-    movementSystem(this.world, this.grid, colliders, TICK_DT);
+    movementSystem(this.world, this.grid, colliders, TICK_DT, this.mods.speed);
     separationSystem(this.world, colliders);
-    harvestSystem(this.world, this.grid, this.economy, TICK_DT);
-    constructionSystem(this.world, this.grid, TICK_DT, (e) => this.completeBuilding(e));
+    harvestSystem(this.world, this.grid, this.economy, TICK_DT, {
+      allowed: this.mods.harvestAllowed,
+      yieldMul: this.mods.gatherYield,
+    });
+    constructionSystem(
+      this.world,
+      this.grid,
+      TICK_DT,
+      (e) => this.completeBuilding(e),
+      this.mods.buildAllowed,
+    );
     this.advanceProduction(TICK_DT);
 
     // Permits trickle in from a base rate plus completed Permit Offices.

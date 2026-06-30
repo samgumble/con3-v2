@@ -40,6 +40,7 @@ export function movementSystem(
   grid: NavGrid,
   obstacles: readonly Collider[],
   dt: number,
+  speedMul = 1,
 ): void {
   const movers = world.query(C.Transform, C.Unit, C.PathFollow).sort((a, b) => a - b);
   if (movers.length === 0) return;
@@ -126,12 +127,13 @@ export function movementSystem(
       az = (az / alen) * AVOID_MAX;
     }
 
-    // Blend (seek-biased) + avoidance, move at full speed along the result.
+    // Blend (seek-biased) + avoidance, move at (possibly modified) speed.
+    const speed = u.speed * speedMul;
     let vx = dx * SEEK + ax;
     let vz = dz * SEEK + az;
     const vlen = Math.hypot(vx, vz) || 1;
-    vx = (vx / vlen) * u.speed;
-    vz = (vz / vlen) * u.speed;
+    vx = (vx / vlen) * speed;
+    vz = (vz / vlen) * speed;
 
     const minX = grid.originX + u.radius;
     const maxX = grid.originX + grid.width * grid.cellSize - u.radius;

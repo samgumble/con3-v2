@@ -240,9 +240,20 @@ const resMaterials = document.getElementById("res-materials")!;
 const resLabor = document.getElementById("res-labor")!;
 const resPermits = document.getElementById("res-permits")!;
 const resLicense = document.getElementById("res-license")!;
+const hazardBanner = document.getElementById("hazardbanner")!;
 
 function updateHud(): void {
   const eco = sim.economy;
+
+  const hz = sim.hazardStatus();
+  if (hz) {
+    hazardBanner.classList.remove("hidden");
+    hazardBanner.innerHTML =
+      `⚠ <b>${hz.name}</b> — ${hz.desc}` +
+      `<span class="hz-timer">${hz.timeLeft}s</span>`;
+  } else {
+    hazardBanner.classList.add("hidden");
+  }
   statUnits.textContent = String(sim.world.query("Unit").length);
   statSel.textContent = String(selected.size);
   resFunds.textContent = String(Math.floor(eco.funds));

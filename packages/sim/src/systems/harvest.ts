@@ -72,7 +72,10 @@ export function harvestSystem(
   grid: NavGrid,
   economy: Economy,
   dt: number,
+  opts: { allowed?: boolean; yieldMul?: number } = {},
 ): void {
+  if (opts.allowed === false) return; // e.g. labor strike: gathering paused
+  const yieldMul = opts.yieldMul ?? 1;
   for (const e of world.query(C.Harvester, C.Transform, C.Unit)) {
     const h = world.get<Harvester>(e, C.Harvester)!;
     const t = world.get<Transform>(e, C.Transform)!;
@@ -160,7 +163,7 @@ export function harvestSystem(
       case "unloading": {
         h.timer -= dt;
         if (h.timer <= 0) {
-          economy.materials += h.carrying;
+          economy.materials += h.carrying * yieldMul; // shortage halves yield
           h.carrying = 0;
           const node = h.nodeId && world.isAlive(h.nodeId) ? h.nodeId : nearestNode(world, t.x, t.z);
           h.nodeId = node;

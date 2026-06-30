@@ -175,6 +175,42 @@ body,
   font-weight: 700;
 }
 
+#hazardbanner {
+  position: fixed;
+  top: 64px;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 8px 18px;
+  background: rgba(58, 26, 22, 0.92);
+  border: 1px solid #f2622a;
+  border-radius: 8px;
+  color: #ffd9c9;
+  font-size: 14px;
+  user-select: none;
+  box-shadow: 0 0 22px rgba(242, 98, 42, 0.35);
+  animation: hazardpulse 1.6s ease-in-out infinite;
+  z-index: 5;
+}
+#hazardbanner.hidden {
+  display: none;
+}
+#hazardbanner b {
+  color: #ffb14d;
+}
+#hazardbanner .hz-timer {
+  margin-left: 8px;
+  padding: 1px 8px;
+  background: rgba(0, 0, 0, 0.3);
+  border-radius: 10px;
+  font-variant-numeric: tabular-nums;
+  font-weight: 700;
+  color: #fff;
+}
+@keyframes hazardpulse {
+  0%, 100% { box-shadow: 0 0 18px rgba(242, 98, 42, 0.3); }
+  50% { box-shadow: 0 0 28px rgba(242, 98, 42, 0.55); }
+}
+
 #buildbar {
   position: fixed;
   right: 16px;

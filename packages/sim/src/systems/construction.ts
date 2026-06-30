@@ -40,7 +40,9 @@ export function constructionSystem(
   grid: NavGrid,
   dt: number,
   onComplete: (e: Entity) => void,
+  allowed = true,
 ): void {
+  if (!allowed) return; // e.g. rainstorm: construction halted
   const effort = new Map<Entity, number>();
 
   for (const e of world.query(C.Builder, C.Transform, C.Unit)) {
