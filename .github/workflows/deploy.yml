@@ -1,8 +1,10 @@
-name: Deploy to Netlify
+name: Deploy to Netlify (manual backup)
 
+# Backup deploy target. GitHub Pages (pages.yml) is the primary host.
+# This stays manual-only — Netlify's account credit cap blocks auto-deploys.
+# Run from the Actions tab once credits are restored if you want the
+# con3-v2.netlify.app mirror back.
 on:
-  push:
-    branches: [main]
   workflow_dispatch:
 
 # Avoid overlapping deploys; cancel an in-flight run when a newer push lands.
