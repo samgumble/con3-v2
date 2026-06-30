@@ -3,7 +3,7 @@
 Dense knowledge transfer so a fresh session can work effectively with no prior
 context. For the original plan see [PLAN.md](PLAN.md); to run see [README.md](README.md).
 
-_Updated: 2026-06-29._
+_Updated: 2026-06-30._
 
 ---
 
@@ -151,21 +151,36 @@ octile, binary heap, no corner-cutting). `spatial-hash.ts` = neighbor queries.
 ## 8. Rendering (packages/engine)
 
 - **game-view.ts** `GameView` — owns scene/camera/renderer. Units rendered as one
-  **InstancedMesh per kind** (one draw call; per-frame interpolated matrices).
-  Buildings/deposits = individual meshes synced from snapshots (`syncBuildings`/
-  `syncNodes`, rebuilt when a building's stageKey/phase changes). Also: placement
-  **ghost** (`showGhost/updateGhost/hideGhost`), command **markers**
-  (`pingMarker` → expanding fading ring), selection rings (instanced).
-- **rts-camera.ts** — pan (WASD/edge), zoom (wheel), yaw (Q/E), `focusOn(x,z)`.
-  Pan derives from the camera's ground axes (correct at every yaw).
+  **InstancedMesh per kind** (one draw call; per-frame interpolated matrices, with
+  motion-bob/tilt). Buildings/deposits = individual meshes synced from snapshots
+  (`syncBuildings`/`syncNodes`, rebuilt when a building's stageKey/phase changes;
+  the HQ gets a slewing tower crane and dust/spark bursts on phase change).
+  Also: placement **ghost** (`showGhost/updateGhost/hideGhost`), command
+  **markers** (`pingMarker` → expanding fading ring), selection rings (instanced).
+  - **Post-processing:** `EffectComposer` + `UnrealBloomPass(0.42,0.55,0.82)` +
+    ACES filmic tone mapping (the "10x graphics" look). Resize keeps composer in sync.
+  - **Weather/events:** `setWeather(kind)` + `updateWeather(dt)` drive per-hazard
+    atmospheres; `buildRain()` = LineSegments rain + lightning flashes (lerp bg to
+    white) + `cameraCtl.shake()`. Presets for rain/osha/shortage/strike.
+  - **Particle pools** (`ParticleFX` from particles.ts): dust / sparks / confetti /
+    smoke. Emitted in `render()` — movement dust, HQ work dust+sparks (phases 5–9),
+    ambient dust, rising smoke from `smokeSources` ({-19,19},{22,8}), placement
+    burst. `celebrate()` fires confetti on win.
+- **particles.ts** — `ParticleFX`: pooled GPU points (custom ShaderMaterial, ring
+  buffer; `spawn`/`burst`/`update`). One pool per effect; never allocates at spawn.
+- **rts-camera.ts** — pan (WASD/edge), zoom (wheel), yaw (Q/E), `focusOn(x,z)`,
+  `shake(amount)` (decaying screen-shake, e.g. lightning). Pan derives from the
+  camera's ground axes (correct at every yaw).
 - **unit-models.ts** — merged vertex-colored low-poly geometry per kind (hi-vis
   worker, CAT-yellow excavator, mobile crane). Swap point for real glTF.
 - **building-models.ts** — `buildBuildingMesh` (support buildings + field office),
   `buildMegaprojectMesh(phase,radius)` (the HQ; **real construction flow** —
   frame tops out first, then slabs, then glass climbs bottom-to-top, then roof/
-  spire), `buildDepositMesh` (aggregate stockpile in a timber bay).
-- **site-decor.ts** — cosmetic: perimeter fence + gate + site sign, cones,
-  jersey barriers, pallets, pipes, skip, port-a-loos. No collision.
+  spire; `buildTowerCrane()` present phases 1–11), `buildDepositMesh` (aggregate
+  stockpile in a timber bay).
+- **site-decor.ts** — cosmetic: perimeter fence + gate + site sign, traffic cones
+  (tapered white band), jersey barriers, pallets, pipes, skip, port-a-loos, and
+  two exhaust-puffing generators (the smoke sources). No collision.
 
 ## 9. Client (apps/client/src/main.ts)
 
@@ -199,8 +214,12 @@ Q/E=rotate · wheel=zoom · Esc=cancel build.
 - **InstancedMesh per unit kind** — scales to 300+ units at 120fps.
 - **`three` is a direct client dep + `resolve.dedupe:['three']`** — required under
   pnpm or example modules (BufferGeometryUtils) load a 2nd three instance.
-- **Netlify via GitHub Actions + nwtgck action** — the netlify-cli has two bins
-  and its monorepo auto-detection fights the workspace.
+- **GitHub Pages is the primary host** (switched 2026-06-30) — Netlify started
+  rejecting deploys with 403 "account credit usage exceeded" (account billing cap,
+  not a token problem). Pages is free, uncapped, and the repo is public. Netlify
+  kept as a manual backup. (If you ever revive Netlify CI: use the `nwtgck/
+  actions-netlify` action, not netlify-cli — the CLI has two bins and its monorepo
+  auto-detection fights the workspace.)
 
 ## 12. Dev gotchas
 
@@ -219,13 +238,18 @@ Q/E=rotate · wheel=zoom · Esc=cancel build.
 **Done & live:** Phases 0–3 (engine, pathfinding/avoidance, economy/build/
 production, permits/tiers/hazards) + megaproject pivot + jitter fix + 2 art
 passes + RTS gameplay polish + **distinct unit roles & economy loop** (storage
-cap, funds-from-phases, crane-gated tall phases) + **CAT-dashboard HUD re-skin**.
+cap, funds-from-phases, crane-gated tall phases) + **CAT-dashboard HUD re-skin** +
+**graphics 10x** (UnrealBloom + ACES, motion-bob, slewing tower crane, hauler
+loads) + **weather/event effects** (rain + lightning + screen-shake, per-hazard
+atmospheres) + **GPU particle system** (dust/sparks/smoke/confetti, generator
+exhaust). Shipping on **GitHub Pages** (deploy unblocked — see §2/§14).
 
 **Rough edges / TODO ideas:** no audio; no save/load (refresh resets); HUD font
 loads from Google Fonts (CDN dependency; falls back to system condensed);
 support-building rally points not implemented; full-playthrough balance
 (~835 mats, funds payouts, tier pacing) not yet tuned against real games;
-buildings other than HQ/Field Office are decent but not deeply detailed.
+**support buildings (trailer/depot/permitOffice/workshop/craneYard) still use the
+generic box mesh — the next obvious art task (#24).**
 
 **Next options:** Phase 4 — **AI opponent** (rival firm racing its own
 megaproject; `Owner` component + per-player economies are the foundation; would
