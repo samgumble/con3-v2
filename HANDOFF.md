@@ -295,6 +295,34 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- **Crane → Concrete-truck reskin (✅ shipped via PR).**
+  Reskinned the heavy unit + its producer to a concrete theme:
+  - **DONE (code, typechecks clean, verified in preview):**
+    - Renames: `UnitKind` `crane`→`concreteTruck`; `BuildingKind` `craneYard`→
+      `cementFactory`; `PhaseDef.requiresCrane`→`requiresConcrete`;
+      `megaprojectStatus().needsCrane`→`needsConcrete`; locals `cranes`→`trucks`.
+      Touched components.ts, world.ts (UNITS/BUILDINGS/PHASES/megaprojectStatus),
+      systems/megaproject.ts, apps/client/src/main.ts (BUILDABLE/TRAINABLE/hint).
+    - New models: `buildConcreteTruck()` in unit-models.ts (cab + tilted ribbed
+      mixing drum + chute, replaces `buildCrane`); `case "cementFactory"` in
+      building-models.ts (two silos + batch tower + control cabin + aggregate
+      conveyor/bins, replaces the crane-yard mesh). HEIGHT key updated too.
+    - HUD labels auto-format via `labelOf` → "Concrete Truck" / "Cement Factory";
+      megapanel hint now "⚠ This phase needs a Concrete Truck on site".
+    - Mechanic preserved + verified: structural phases (`requiresConcrete`) stall
+      with effort 0 / `needsConcrete:true` until a concrete truck is on-site, then
+      pour (effort accrues, phase advances). All packages `pnpm -r typecheck` green.
+  - **GUIDE.md fully updated** — all ~16 player-facing references swapped (unit
+    "Crane"→"Concrete Truck", "Crane Yard"→"Cement Factory", roster + phase-table
+    emoji 🏗️→🚛, "Needs crane" column header→"Needs concrete", the greyed-button
+    example, and the opening-strategy + anti-softlock prose). Decorative 🏗️ in the
+    "12 HQ phases" section header and the closing sign-off were kept on purpose
+    (generic construction iconography — the HQ's own tower crane lives on).
+  - **Shipped via PR** on branch `reskin/crane-to-concrete-truck`; the GitHub
+    Pages deploy runs on merge to `main`.
+  - **GOTCHA — do NOT rename the HQ's own tower crane.** `buildClimbingCrane()`,
+    `bv.crane` (the slewing tower crane on the HQ in building-models.ts / game-
+    view.ts) are a *separate* thing and stay named "crane"/"towerCrane".
 - Golden-hour lighting + atmospheric fog (game-view.ts). The directional sun is
   now low + warm (`0xffcd83` at (56,33,24), intensity 1.75) for long raking
   shadows (shadow frustum widened to ±88, far 300); hemi/ambient warmed to match.

@@ -57,7 +57,7 @@ export interface Selectable {
   selected: boolean;
 }
 
-export type UnitKind = "worker" | "excavator" | "crane";
+export type UnitKind = "worker" | "excavator" | "concreteTruck";
 
 /** Anything circular that units steer around (rocks, buildings, deposits). */
 export interface Collider {
@@ -83,7 +83,7 @@ export type BuildingKind =
   | "depot"
   | "permitOffice"
   | "workshop"
-  | "craneYard";
+  | "cementFactory";
 
 /** A placed structure. Footprint radius is used for collision + placement. */
 export interface Building {

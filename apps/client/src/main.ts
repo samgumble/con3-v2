@@ -67,7 +67,7 @@ function labelOf(kind: string): string {
 }
 
 // --- Build mode -----------------------------------------------------------
-const BUILDABLE: BuildingKind[] = ["trailer", "depot", "permitOffice", "workshop", "craneYard"];
+const BUILDABLE: BuildingKind[] = ["trailer", "depot", "permitOffice", "workshop", "cementFactory"];
 let buildMode: BuildingKind | null = null;
 const buildBtns = new Map<BuildingKind, HTMLButtonElement>();
 const buildReq = new Map<BuildingKind, HTMLElement>();
@@ -107,7 +107,7 @@ function exitBuild(): void {
 }
 
 // --- Train (unit production) ---------------------------------------------
-const TRAINABLE: UnitKind[] = ["worker", "excavator", "crane"];
+const TRAINABLE: UnitKind[] = ["worker", "excavator", "concreteTruck"];
 const trainBtns = new Map<
   UnitKind,
   { btn: HTMLButtonElement; q: HTMLElement; prog: HTMLElement; req: HTMLElement }
@@ -134,12 +134,12 @@ for (const kind of TRAINABLE) {
 
 // --- "Why is this greyed out?" --------------------------------------------
 // Compute the single most relevant blocking reason for a palette item so the
-// HUD can show it inline — a big help for new players (e.g. a Crane button
-// explaining it needs a Crane Yard, not just sitting there dimmed).
+// HUD can show it inline — a big help for new players (e.g. a Concrete Truck
+// button explaining it needs a Cement Factory, not just sitting there dimmed).
 function licenseFor(tier: number): string {
   return LICENSE_TIERS[tier]?.name ?? "a higher";
 }
-/** The building kind that trains a given unit (e.g. crane → craneYard). */
+/** The building kind that trains a given unit (e.g. concreteTruck → cementFactory). */
 function producerKindFor(unit: UnitKind): BuildingKind | null {
   for (const bk of Object.keys(BUILDINGS) as BuildingKind[]) {
     if (BUILDINGS[bk].trains.includes(unit)) return bk;
@@ -460,8 +460,8 @@ function updateHud(): void {
     megaEff.style.width = pct(mp.effort / mp.effortReq);
     megaOverall.style.width = pct(mp.overall);
     megaPct.textContent = `${Math.round(mp.overall * 100)}%`;
-    if (mp.needsCrane) {
-      megaHint.textContent = "⚠ This phase needs a Crane on site";
+    if (mp.needsConcrete) {
+      megaHint.textContent = "⚠ This phase needs a Concrete Truck on site";
       megaHint.classList.add("warn");
     } else {
       megaHint.classList.remove("warn");

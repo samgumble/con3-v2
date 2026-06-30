@@ -187,81 +187,70 @@ function buildExcavator(): THREE.BufferGeometry {
   return merge(parts);
 }
 
-function buildCrane(): THREE.BufferGeometry {
-  // A mobile (truck-mounted) crane.
+function buildConcreteTruck(): THREE.BufferGeometry {
+  // A concrete mixer (cement) truck: cab + a big tilted rotating drum + chute.
   const parts: THREE.BufferGeometry[] = [];
+  const DRUM = 0xdadbd6;
 
-  // Carrier chassis + six wheels.
-  const chassis = box(0.95, 0.32, 2.1, DARK);
-  chassis.translate(0, 0.4, 0);
+  // Chassis + wheels (front axle + twin rear axles).
+  const chassis = box(0.82, 0.28, 2.5, DARK);
+  chassis.translate(0, 0.42, 0);
   parts.push(chassis);
-  for (const sx of [-0.55, 0.55]) {
-    for (const sz of [-0.7, 0, 0.7]) {
-      const wheel = cyl(0.26, 0.26, 0.16, RUBBER, 9);
-      wheel.rotateZ(Math.PI / 2);
-      wheel.translate(sx, 0.26, sz);
-      parts.push(wheel);
-      const hub = cyl(0.1, 0.1, 0.18, STEEL, 6);
-      hub.rotateZ(Math.PI / 2);
-      hub.translate(sx, 0.26, sz);
-      parts.push(hub);
-    }
+  for (const [sx, sz] of [
+    [-0.46, 0.85], [0.46, 0.85],
+    [-0.46, -0.5], [0.46, -0.5],
+    [-0.46, -1.0], [0.46, -1.0],
+  ] as [number, number][]) {
+    const wheel = cyl(0.27, 0.27, 0.16, RUBBER, 9);
+    wheel.rotateZ(Math.PI / 2);
+    wheel.translate(sx, 0.27, sz);
+    parts.push(wheel);
+    const hub = cyl(0.1, 0.1, 0.18, STEEL, 6);
+    hub.rotateZ(Math.PI / 2);
+    hub.translate(sx, 0.27, sz);
+    parts.push(hub);
   }
-  // Glazed driver cab up front.
-  const cab = box(0.85, 0.5, 0.6, CAT);
-  cab.translate(0, 0.85, 0.78);
+
+  // Glazed cab up front + beacon + a water tank behind it.
+  const cab = box(0.82, 0.66, 0.66, CAT);
+  cab.translate(0, 0.82, 1.0);
   parts.push(cab);
-  const windscreen = box(0.74, 0.34, 0.06, GLASS);
-  windscreen.translate(0, 0.92, 1.06);
+  const windscreen = box(0.72, 0.34, 0.06, GLASS);
+  windscreen.translate(0, 0.92, 1.34);
   parts.push(windscreen);
   const beacon = box(0.12, 0.1, 0.12, AMBER);
-  beacon.translate(0.28, 1.13, 0.78);
+  beacon.translate(0.26, 1.18, 1.0);
   parts.push(beacon);
+  const tank = cyl(0.16, 0.16, 0.66, STEEL, 8);
+  tank.rotateZ(Math.PI / 2);
+  tank.translate(0, 1.02, 0.58);
+  parts.push(tank);
 
-  // Slewing deck with a winch drum + counterweight.
-  const deck = box(1.0, 0.34, 1.1, CAT);
-  deck.translate(0, 0.78, -0.35);
-  parts.push(deck);
-  const cweight = box(0.92, 0.4, 0.28, DARK);
-  cweight.translate(0, 0.74, -0.82);
-  parts.push(cweight);
-  const drum = cyl(0.16, 0.16, 0.5, STEEL, 8);
-  drum.rotateZ(Math.PI / 2);
-  drum.translate(0, 1.0, -0.45);
+  // Tilted mixing drum (rear-high) with rib bands, a loading hopper + chute.
+  const tilt = -1.25; // drum axis dir ≈ (0, cos, sin) = (0, 0.32, -0.95)
+  const ay = Math.cos(tilt);
+  const az = Math.sin(tilt);
+  const cy = 1.02;
+  const cz = -0.18;
+  const drum = colored(new THREE.CylinderGeometry(0.44, 0.54, 1.7, 12), DRUM);
+  drum.rotateX(tilt);
+  drum.translate(0, cy, cz);
   parts.push(drum);
-  // Outriggers: a beam + an angled leg + a foot pad at each corner.
-  for (const sx of [-0.62, 0.62]) {
-    for (const sz of [-0.7, 0.2] as const) {
-      const beam = box(0.16, 0.12, 0.16, STEEL);
-      beam.translate(sx * 0.85, 0.6, sz);
-      parts.push(beam);
-      const leg = box(0.1, 0.4, 0.1, STEEL);
-      leg.translate(sx, 0.3, sz);
-      parts.push(leg);
-      const pad = cyl(0.16, 0.2, 0.1, DARK, 8);
-      pad.translate(sx, 0.06, sz);
-      parts.push(pad);
-    }
+  for (const t of [-0.55, 0, 0.55]) {
+    const band = colored(new THREE.CylinderGeometry(0.56, 0.56, 0.08, 12), CAT);
+    band.rotateX(tilt);
+    band.translate(0, cy + ay * t, cz + az * t);
+    parts.push(band);
   }
-
-  // Telescoping boom (two segments) angled up over the rear, with a hook block.
-  const boom = box(0.26, 0.26, 2.4, CAT);
-  boom.rotateX(0.7);
-  boom.translate(0, 1.5, -0.45);
-  parts.push(boom);
-  const boom2 = box(0.18, 0.18, 1.6, CAT_DK);
-  boom2.rotateX(0.7);
-  boom2.translate(0, 2.35, 0.5);
-  parts.push(boom2);
-  const tip = box(0.2, 0.16, 0.18, STEEL);
-  tip.translate(0, 3.05, 1.05);
-  parts.push(tip);
-  const line = box(0.04, 0.8, 0.04, DARK);
-  line.translate(0, 2.62, 1.05);
-  parts.push(line);
-  const hook = box(0.16, 0.22, 0.16, STEEL);
-  hook.translate(0, 2.15, 1.05);
-  parts.push(hook);
+  const hopper = colored(new THREE.CylinderGeometry(0.3, 0.16, 0.42, 10), STEEL);
+  hopper.rotateX(tilt);
+  hopper.translate(0, cy + ay * 0.95 + 0.12, cz + az * 0.95);
+  parts.push(hopper);
+  const chute = colored(new THREE.CylinderGeometry(0.2, 0.13, 0.8, 8, 1, true, 0, Math.PI), STEEL);
+  chute.rotateZ(Math.PI / 2);
+  chute.rotateX(0.5);
+  chute.translate(0, 0.6, -1.5);
+  parts.push(chute);
 
   return merge(parts);
 }
@@ -277,6 +266,6 @@ export function buildUnitGeometries(): Record<string, THREE.BufferGeometry> {
   return {
     worker: buildWorker(),
     excavator: buildExcavator(),
-    crane: buildCrane(),
+    concreteTruck: buildConcreteTruck(),
   };
 }
