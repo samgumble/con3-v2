@@ -1,101 +1,227 @@
 # Con3 — Session Handoff
 
-Living status doc for the Con3 build. Updated as work progresses this session.
-For the full design see [PLAN.md](PLAN.md); for run/deploy see [README.md](README.md).
+Dense knowledge transfer so a fresh session can work effectively with no prior
+context. For the original plan see [PLAN.md](PLAN.md); to run see [README.md](README.md).
 
-_Last updated: 2026-06-29_
+_Updated: 2026-06-29._
 
-## What this is
+---
 
-A 3D, browser-based, construction-themed RTS. **The game is now centered on one
-megaproject: you build the HQ through 12 real construction phases, and finishing
-it wins.** Every economy loop (gather materials, train workers, permits, support
-buildings) feeds that central build.
+## 1. The game in one paragraph
 
-## Live / repo
+Con3 is a 3D, browser-based, **construction-themed RTS**. The game is **centered
+on one megaproject: you build the HQ through 12 real construction phases, and
+finishing it = victory.** Everything else (gather Materials, train workers, earn
+Permits to raise your license tier, place support buildings, survive hazard
+events) exists to feed that central build. Single-player vs. environment for now;
+the sim is built to add an AI opponent / netcode later.
 
-- **Play:** https://con3-v2.netlify.app (auto-deploys from `main`)
+**Core loop:** select workers → right-click a material **deposit** to gather →
+they haul to the **Field Office** (drop-off) → right-click the **HQ** to send
+crews there → on-site crews spend the yard's Materials + their effort to advance
+HQ phases → complete all 12 phases to win. Permits (passive + Permit Office)
+raise your **license tier**, unlocking the Workshop (excavators) and Crane Yard
+(cranes). Random **hazards** (rain/OSHA/shortage/strike) periodically disrupt you.
+
+---
+
+## 2. Live / repo / deploy
+
+- **Play:** https://con3-v2.netlify.app
 - **Repo:** https://github.com/samgumble/con3-v2 (public)
-- **Deploy:** GitHub Actions → Netlify (`.github/workflows/deploy.yml`); secrets
-  `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` already set. Pushing to `main` ships it.
+- **Shipping:** push to `main` → GitHub Actions (`.github/workflows/deploy.yml`)
+  builds the client and deploys to Netlify via `nwtgck/actions-netlify`. Secrets
+  `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` are already configured. No manual step.
+- After pushing, watch with `gh run watch <id> --exit-status`. The Node-20
+  deprecation warning in CI is harmless.
 
-## Run
+## 3. Run / test / verify
 
 ```bash
 pnpm install
-pnpm dev        # http://localhost:5173
-pnpm build      # production build of the client
-pnpm -r typecheck
+pnpm dev          # http://localhost:5173  (Vite)
+pnpm build        # production build → apps/client/dist
+pnpm -r typecheck # typecheck every package — DO THIS before committing
 ```
 
-Local preview server is managed via `.claude/launch.json` (name `con3`, port 5173).
-Dev-only debug handle in the browser console: `window.__con3 = { sim, view }`.
+- Browser debug handle (dev only): `window.__con3 = { sim, view }` (set at the
+  end of `apps/client/src/main.ts`). Drive/inspect the sim from the console.
+- The local preview is wired for the Claude preview tool via `.claude/launch.json`
+  (server name `con3`, port 5173).
+- **Verifying behaviour:** drive `window.__con3.sim` from an eval — e.g. fast-
+  forward with `for(...) sim.step()` and read snapshots. Camera: `view.cameraCtl.focusOn(x,z)`.
 
-## Architecture (pnpm monorepo, TypeScript)
+## 4. Architecture (pnpm + TypeScript monorepo)
 
 ```
-packages/
-  ecs/      data-oriented Entity-Component-System
-  sim/      deterministic 20 Hz fixed-step sim — components, systems, GameSim
-            systems: movement, avoidance(separation), harvest, construction,
-                     production(in GameSim), megaproject
-  engine/   Three.js renderer: GameView, RtsCamera, unit-models,
-            building-models, site-decor
-apps/
-  client/   Vite app: game loop (fixed-step + interpolation), input, HUD
+packages/ecs      Tiny data-oriented ECS (World: entities are ints, components in per-type Maps)
+packages/sim      Deterministic fixed-step (20 Hz) simulation. NO rendering deps.
+packages/engine   Three.js rendering. NO gameplay logic.
+apps/client       Vite app: glues sim+engine, game loop, input, HUD/DOM.
 ```
 
-- **Sim is deterministic and decoupled from rendering** (renderer interpolates).
-  `GameSim.step()` order: hazards → movement → separation → harvest →
-  construction → megaproject → production → permits → labor recount.
-- **Config lives in `world.ts`** maps: `BUILDINGS`, `UNITS`, `PHASES`,
-  `LICENSE_TIERS`, `HAZARDS` — tune balance there.
-- Units render via one **InstancedMesh per kind**; buildings/deposits are
-  individual meshes synced from snapshots.
+- **Determinism is load-bearing.** Sim advances in fixed `TICK_DT` (1/20 s)
+  steps; the renderer interpolates between ticks. This keeps gameplay
+  reproducible and makes lockstep netcode a later add-on, not a rewrite. Don't
+  put `Math.random()` (use the seeded RNG in `world.ts`) or wall-clock time in
+  the sim.
+- **Sim ↔ render boundary:** the renderer only reads sim **snapshots**
+  (`snapshot()`, `buildingSnapshot()`, `nodeSnapshot()`); it never mutates the
+  sim. The engine has its own decoupled `RenderUnit/RenderBuilding/RenderNode`
+  types so it doesn't import sim.
 
-## Status
+### GameSim.step() order (packages/sim/src/world.ts)
+`advanceHazards → movement → separation(avoidance) → harvest → construction →
+megaproject → advanceProduction → permits accrual → labor recount → tick++`.
+Hazard "buildAllowed=false" gates construction + megaproject; "produceAllowed",
+"harvestAllowed", "gatherYield", "speed" gate the others (see `Mods`).
 
-**Done & live:**
-- Phase 0 — engine foundation (Three.js + ECS + RTS camera + fixed-step loop)
-- Phase 1 — units & control (A* pathfinding, local-avoidance steering,
-  obstacles, instanced rendering, low-poly models)
-- Phase 2 — economy & building (Funds/Materials/Labor, deposits + gather/haul,
-  build placement + multi-stage construction, unit production)
-- Phase 3 — tech & roster (Permits + license tiers, Permit Office + Crane Yard,
-  hazard events)
-- **Megaproject pivot** — HQ is a 12-phase main building; Field Office is the ops
-  base; right-click the HQ with workers to build it; completing it = victory.
-  Visual follows real construction flow (structure tops out before glass).
-- **Jitter fix** — velocity smoothing/inertia + arrival easing in movement.
-- **Art pass** — daytime site lighting, perimeter fence + gate + cones +
-  barriers + props; hi-vis workers, CAT-yellow excavators, mobile cranes,
+## 5. Data model (components — `packages/sim/src/components.ts`)
+
+`Transform{x,z,rot}` · `PathFollow{waypoints,index,goal,stuck,bestDist,replans,vx,vz}`
+(vx/vz = smoothed velocity for jitter-free steering) · `Unit{kind,speed,radius}`
+(kind: worker|excavator|crane) · `Selectable{selected}` · `Owner{player}` (0 =
+human; reserved for AI) · `Obstacle/Collider{x,z,radius}` · `Building{kind,radius}`
+· `Construction{progress,buildTime}` (support buildings) · `DropOff` (accepts
+materials) · `ResourceNode{amount,maxAmount,radius}` · `Harvester{state,nodeId,
+dropId,carrying,capacity,timer}` · `Builder{targetId}` (builds a support
+building) · `Producer{trains,queue,progress}` · `MegaProject{phaseIndex,
+phaseMaterials,phaseEffort,complete}` (only on the HQ) · `MegaBuilder` (tag:
+worker assigned to the HQ). `C` is the string-key registry.
+
+## 6. Systems (packages/sim/src/systems/ + GameSim)
+
+- **movement.ts** — steering path-follow. Seek waypoint + neighbor/obstacle
+  avoidance (repel + tangential sidestep), velocity **smoothed** (`ACCEL`) to
+  kill jitter, arrival easing near the final waypoint, stuck-detection replan.
+  Uses `grid` (A*) + `SpatialHash`. Tunables at top of file.
+- **avoidance.ts** (`separationSystem`) — mobility-weighted de-overlap (movers
+  yield to idle anchors) + push units out of obstacle circles. 2 relax passes.
+- **harvest.ts** — gather state machine: toNode→mining→toDrop→unloading. Drains
+  a `ResourceNode`, deposits into `economy.materials` at a `DropOff`.
+- **construction.ts** — `Builder`s walk to a support-building blueprint and add
+  effort; `onComplete` calls `GameSim.completeBuilding` (registers DropOff,
+  grants labor). NOTE: skips builders whose target isn't a `Construction` — the
+  HQ uses `MegaBuilder`, not `Builder`, so no conflict.
+- **megaproject.ts** — `MegaBuilder`s walk to the HQ; on-site crews add effort +
+  drain `economy.materials` into the current phase; phase completes when both
+  targets met; final phase calls `onWin` → `sim.won=true`.
+- **production** (`advanceProduction` in world.ts) — `Producer.queue` advances;
+  spawns the unit beside the building. **hazards** (`advanceHazards`) — seeded
+  RNG scheduler; sets global `Mods`.
+
+`grid.ts` = NavGrid (2-unit cells over ±60). `pathfind.ts` = A* (8-connected,
+octile, binary heap, no corner-cutting). `spatial-hash.ts` = neighbor queries.
+
+## 7. Config / balance knobs (ALL in `packages/sim/src/world.ts`)
+
+- `BUILDINGS` — radius, cost, buildTime, dropOff, providesLabor, trains, **tier**,
+  permitsPerSec. Kinds: hq (megaproject, no ops), fieldOffice (ops base: dropoff
+  + trains worker + 20 labor, pre-built), trailer, depot, permitOffice,
+  workshop(tier1, excavators), craneYard(tier2, cranes).
+- `UNITS` — costFunds, trainTime, labor, tier. (worker 1 labor/t0, excavator
+  2/t1, crane 3/t2.)
+- `PHASES` — the 12 HQ phases `{name,materials,effort}` (~835 mats / ~170
+  worker-seconds total).
+- `LICENSE_TIERS` — Residential→Commercial→Industrial→Skyscraper upgrade costs
+  (funds+permits). `BASE_PERMIT_RATE`.
+- `HAZARDS` — 4 events with duration + `Mods` partials.
+- Movement feel: constants at top of `systems/movement.ts`.
+- Harvest carry capacity / timings: `harvest.ts` + `assignHarvest` (capacity 12).
+- Map layout (deposits, obstacles, building positions): `GameSim` constructor +
+  `spawnDeposits`/`spawnObstacles`.
+
+## 8. Rendering (packages/engine)
+
+- **game-view.ts** `GameView` — owns scene/camera/renderer. Units rendered as one
+  **InstancedMesh per kind** (one draw call; per-frame interpolated matrices).
+  Buildings/deposits = individual meshes synced from snapshots (`syncBuildings`/
+  `syncNodes`, rebuilt when a building's stageKey/phase changes). Also: placement
+  **ghost** (`showGhost/updateGhost/hideGhost`), command **markers**
+  (`pingMarker` → expanding fading ring), selection rings (instanced).
+- **rts-camera.ts** — pan (WASD/edge), zoom (wheel), yaw (Q/E), `focusOn(x,z)`.
+  Pan derives from the camera's ground axes (correct at every yaw).
+- **unit-models.ts** — merged vertex-colored low-poly geometry per kind (hi-vis
+  worker, CAT-yellow excavator, mobile crane). Swap point for real glTF.
+- **building-models.ts** — `buildBuildingMesh` (support buildings + field office),
+  `buildMegaprojectMesh(phase,radius)` (the HQ; **real construction flow** —
+  frame tops out first, then slabs, then glass climbs bottom-to-top, then roof/
+  spire), `buildDepositMesh` (aggregate stockpile in a timber bay).
+- **site-decor.ts** — cosmetic: perimeter fence + gate + site sign, cones,
+  jersey barriers, pallets, pipes, skip, port-a-loos. No collision.
+
+## 9. Client (apps/client/src/main.ts)
+
+Fixed-step loop with interpolation; captures `lastSnapshot` each tick (reused by
+HUD). Input: box-select, double-click (all of type on screen), right-click
+(context: HQ→megabuild / blueprint→build / deposit→gather / ground→move, each
+with a colored ping), control groups (Ctrl+1-9 set / 1-9 recall), Tab (idle
+worker cycle, Shift+Tab all idle), Esc (cancel build). HUD: top resource bar
+(Funds/Materials/Labor/Permits/License), top-left MAIN BUILDING phase tracker,
+top hazard banner, bottom-left selection panel (crews/idle/composition+task),
+bottom-right TRAIN + BUILD palette (tier-locked) + Upgrade-License button,
+victory overlay. `index.html` + `style.css` hold the DOM/styling.
+
+## 10. Controls (player)
+
+Drag=select · Dbl-click=all of type · Right-click=move/gather/build/HQ ·
+Ctrl+1-9=set group · 1-9=recall · Tab=idle worker · WASD/arrows/edges=pan ·
+Q/E=rotate · wheel=zoom · Esc=cancel build.
+
+## 11. Key decisions & WHY (don't undo without reason)
+
+- **HQ = the megaproject, Field Office = ops base.** User chose this; the HQ is
+  the win objective, so it can't also be the operational hub.
+- **Phases consume materials + effort** (no funds/permit gates on phases) — user
+  choice. License tiers gate *buildings/units*, not HQ phases.
+- **Construction visual = real flow** (structure before glass) — explicit user
+  request; see `buildMegaprojectMesh`.
+- **Deterministic fixed-step sim** — for reproducibility + future netcode.
+- **Velocity smoothing in movement** — fixed "units going crazy" jitter; don't
+  revert to per-tick heading recompute.
+- **InstancedMesh per unit kind** — scales to 300+ units at 120fps.
+- **`three` is a direct client dep + `resolve.dedupe:['three']`** — required under
+  pnpm or example modules (BufferGeometryUtils) load a 2nd three instance.
+- **Netlify via GitHub Actions + nwtgck action** — the netlify-cli has two bins
+  and its monorepo auto-detection fights the workspace.
+
+## 12. Dev gotchas
+
+- **rAF runs the sim too.** The browser loop calls `sim.step()` in real time, so
+  `sim.tick` runs ahead of any manual step count in an eval, and an eval right
+  after `location.reload()` may hit the **previous** sim instance. Guard evals
+  with a freshness check (`sim.tick < 300`, building count, etc.).
+- The preview panel can render narrow (~600px); UI panels overlap. Hide panels
+  via `document.getElementById('buildbar').style.display='none'` for clean shots.
+- Always `pnpm -r typecheck` before commit (strict TS: noUnusedLocals etc.).
+- Map/sim layout positions are in world units; +Z is "south"/toward camera at
+  default yaw, HQ is north-ish at (0,16), Field Office at (-14,17).
+
+## 13. Status & next steps
+
+**Done & live:** Phases 0–3 (engine, pathfinding/avoidance, economy/build/
+production, permits/tiers/hazards) + megaproject pivot + jitter fix + 2 art
+passes + RTS gameplay polish.
+
+**Rough edges / TODO ideas:** no audio; no save/load (refresh resets); deposits
+are ~24u from base (hauling is deliberately a grind); support-building rally
+points not implemented; buildings other than HQ/Field Office are decent but not
+deeply detailed; megaproject balance (~835 mats) untuned against real playthroughs.
+
+**Next options:** Phase 4 — **AI opponent** (rival firm racing its own
+megaproject; `Owner` component + per-player economies are the foundation; would
+need an AI build-order/economy/assignment system + a second base/megaproject).
+Phase 5 — conflict/sabotage. Plus polish: audio (ElevenLabs/Lyria), save/load,
+real glTF assets.
+
+## 14. Session changelog (newest first)
+
+- Gameplay polish: command markers, control groups, double-click, idle-worker
+  tools, selection info panel, carry-capacity balance.
+- Art pass 2: refined units (hi-vis worker / CAT excavator / mobile crane) +
   material-stockpile deposits.
-
-**In progress:** gameplay-mechanics polish (RTS quality-of-life).
-- [~] Command-feedback markers, control groups, double-click select, idle-worker
-  tools, selection info panel, balance tuning.
-
-**Next options:** Phase 4 — AI opponent (rival firm racing its own megaproject);
-Phase 5 — conflict/sabotage. Optional: audio (SFX/music), real glTF assets.
-
-## Key gotchas / notes
-
-- **Tests vs the live loop:** the browser rAF loop also calls `sim.step()`, so
-  `sim.tick` runs ahead of any manual step count, and an eval right after
-  `location.reload()` may hit the *previous* sim — guard evals with a freshness
-  check (e.g. `sim.tick < 300` or building count).
-- **three dedup:** `three` is a direct dependency of `apps/client` +
-  `resolve.dedupe:['three']` in vite config (needed under pnpm).
-- **Netlify deploy** uses `nwtgck/actions-netlify` (the netlify-cli has two bins
-  and its monorepo auto-detection fought the workspace).
-- Model swap points for real glTF later: `unit-models.ts`, `building-models.ts`.
-
-## Session changelog (newest first)
-
-- Art pass 2: refined units (hi-vis worker, CAT excavator, mobile crane) +
-  material-stockpile deposits.
-- Art pass 1: construction-site environment (lighting, fence, props, ground).
+- Art pass 1: construction-site environment (daytime lighting, fence, props).
 - Megaproject pivot + realistic construction-flow visual + victory screen.
-- Movement jitter fix (velocity smoothing).
-- Phase 3 (permits/tiers/roster + hazards); Phase 2 (economy/build/production);
-  Phase 1 (pathfinding/avoidance/instancing); Phase 0 (foundation).
+- Movement jitter fix (velocity smoothing/inertia + arrival easing).
+- Camera pan-inversion fix (derive pan from camera ground axes).
+- Phases 0–3 shipped (see Status).
