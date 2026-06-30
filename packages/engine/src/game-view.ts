@@ -130,10 +130,13 @@ export class GameView {
   private dust!: ParticleFX;
   private sparks!: ParticleFX;
   private confetti!: ParticleFX;
+  private smoke!: ParticleFX;
+  private readonly smokeSources: { x: number; z: number }[] = [];
   private hqPos: THREE.Vector3 | null = null;
   private hqActive = false;
   private hqPhase = 0;
   private ambientTimer = 0;
+  private buildingsInit = false;
 
   private readonly raycaster = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -187,7 +190,27 @@ export class GameView {
     this.dust = new ParticleFX(900, THREE.NormalBlending, 1.2, pr);
     this.sparks = new ParticleFX(500, THREE.AdditiveBlending, 11, pr);
     this.confetti = new ParticleFX(500, THREE.AdditiveBlending, 5, pr);
-    this.scene.add(this.dust.points, this.sparks.points, this.confetti.points);
+    this.smoke = new ParticleFX(700, THREE.NormalBlending, -0.35, pr); // negative gravity = rises
+    this.scene.add(this.dust.points, this.sparks.points, this.confetti.points, this.smoke.points);
+
+    // Site generators that puff a smoke column (with a little box mesh each).
+    for (const s of [{ x: -19, z: 19 }, { x: 22, z: 8 }]) {
+      this.smokeSources.push(s);
+      const gen = new THREE.Mesh(
+        new THREE.BoxGeometry(1.0, 0.8, 1.4),
+        new THREE.MeshStandardMaterial({ color: 0xe0a020, roughness: 0.8, flatShading: true }),
+      );
+      gen.position.set(s.x, 0.4, s.z);
+      gen.castShadow = true;
+      gen.receiveShadow = true;
+      this.scene.add(gen);
+      const pipe = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.1, 0.1, 0.7, 8),
+        new THREE.MeshStandardMaterial({ color: 0x2a2d31, flatShading: true }),
+      );
+      pipe.position.set(s.x + 0.3, 1.05, s.z - 0.4);
+      this.scene.add(pipe);
+    }
 
     window.addEventListener("resize", () => this.resize());
   }
@@ -304,6 +327,7 @@ export class GameView {
     if (this.lightningTimer <= 0) {
       this.flash = Math.random() < 0.35 ? 1.5 : 1.0; // sometimes a double-bright bolt
       this.lightningTimer = 2.5 + Math.random() * 5.5;
+      this.cameraCtl.shake(0.7); // thunder rattles the rig
     }
     this.flash = Math.max(0, this.flash - dt * 6);
     const f = Math.min(1, this.flash);
@@ -474,6 +498,9 @@ export class GameView {
           this.dust.burst(b.x, 1.2, b.z, isMega ? 34 : 16, 2.8, 2.4, 1.1, 0.9, 0.86, 0.78, 1.1);
           if (isMega) this.sparks.burst(b.x, 2.5, b.z, 26, 4.5, 5, 0.28, 1.0, 0.82, 0.32, 0.7);
           this.scene.remove(v.group);
+        } else if (this.buildingsInit && !isMega) {
+          // A freshly-placed building blueprint kicks up a dust puff.
+          this.dust.burst(b.x, 0.6, b.z, 22, b.radius + 1, 1.6, 1.1, 0.9, 0.86, 0.78, 1.0);
         }
         const group = isMega
           ? buildMegaprojectMesh(b.megaPhase!, b.radius)
@@ -507,6 +534,7 @@ export class GameView {
         this.buildings.delete(id);
       }
     }
+    this.buildingsInit = true;
   }
 
   /** Tell the FX layer whether crews are working the HQ, and which phase. */
@@ -691,6 +719,17 @@ export class GameView {
     this.dust.update(dt);
     this.sparks.update(dt);
     this.confetti.update(dt);
+    this.smoke.update(dt);
+    // Generators puff a rising smoke column.
+    for (const s of this.smokeSources) {
+      if (Math.random() < 0.55) {
+        this.smoke.spawn(
+          s.x + 0.3 + (Math.random() - 0.5) * 0.25, 1.45, s.z - 0.4 + (Math.random() - 0.5) * 0.25,
+          (Math.random() - 0.5) * 0.3, 0.8 + Math.random() * 0.5, (Math.random() - 0.5) * 0.3,
+          0.95 + Math.random() * 0.8, 0.5, 0.5, 0.52, 2.6 + Math.random() * 1.6,
+        );
+      }
+    }
 
     const counters = new Map<string, number>();
     for (const kind of this.kindMeshes.keys()) counters.set(kind, 0);

@@ -38,16 +38,32 @@ function mulberry32(seed: number): () => number {
 /** Orange-and-white traffic cone. */
 function cone(): THREE.Group {
   const g = new THREE.Group();
-  const base = box(0.5, 0.06, 0.5, DARK);
+  const H = 0.62; // cone height
+  const R = 0.17; // cone base radius
+  const yBase = 0.06; // top of the square base slab
+
+  // Square base slab.
+  const base = box(0.42, 0.06, 0.42, DARK);
   base.position.y = 0.03;
   g.add(base);
-  const body = new THREE.Mesh(new THREE.ConeGeometry(0.2, 0.55, 8), mat(ORANGE));
-  body.position.y = 0.32;
+
+  // Orange cone body sitting on the base.
+  const body = new THREE.Mesh(new THREE.ConeGeometry(R, H, 14), mat(ORANGE));
+  body.position.y = yBase + H / 2;
   body.castShadow = true;
   g.add(body);
-  const stripe = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.17, 0.1, 8), mat(WHITE));
-  stripe.position.y = 0.32;
-  g.add(stripe);
+
+  // White reflective band — a short frustum that hugs the cone's taper and
+  // protrudes just slightly, so it wraps the cone instead of flaring out.
+  const f1 = 0.24;
+  const f2 = 0.42;
+  const proud = 0.012;
+  const band = new THREE.Mesh(
+    new THREE.CylinderGeometry(R * (1 - f2) + proud, R * (1 - f1) + proud, (f2 - f1) * H, 14),
+    mat(WHITE),
+  );
+  band.position.y = yBase + ((f1 + f2) / 2) * H;
+  g.add(band);
   return g;
 }
 

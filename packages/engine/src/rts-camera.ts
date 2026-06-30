@@ -21,6 +21,7 @@ export class RtsCamera {
 
   private readonly keys = new Set<string>();
   private readonly bounds = 60; // half-extent of the playable area
+  private shakeAmt = 0;
 
   constructor(
     aspect: number,
@@ -70,6 +71,11 @@ export class RtsCamera {
     return this.target.z;
   }
 
+  /** Kick a transient camera shake (e.g. a lightning strike). */
+  shake(amount: number): void {
+    this.shakeAmt = Math.max(this.shakeAmt, amount);
+  }
+
   /** Advance camera from input. Call once per rendered frame. */
   update(dt: number, pointer?: { x: number; y: number; w: number; h: number }): void {
     let fx = 0;
@@ -90,6 +96,11 @@ export class RtsCamera {
 
     if (this.keys.has("q")) this.yaw -= this.rotateSpeed * dt;
     if (this.keys.has("e")) this.yaw += this.rotateSpeed * dt;
+
+    // Decaying camera shake (e.g. from a lightning strike).
+    if (this.shakeAmt > 0.001) {
+      this.shakeAmt = Math.max(0, this.shakeAmt - dt * 3);
+    }
 
     if (fx !== 0 || fz !== 0) {
       const len = Math.hypot(fx, fz) || 1;
@@ -117,10 +128,11 @@ export class RtsCamera {
     const vert = Math.sin(this.pitch) * this.distance;
     const offX = Math.sin(this.yaw) * horiz;
     const offZ = Math.cos(this.yaw) * horiz;
+    const sh = this.shakeAmt;
     this.camera.position.set(
-      this.target.x + offX,
-      this.target.y + vert,
-      this.target.z + offZ,
+      this.target.x + offX + (sh > 0 ? (Math.random() - 0.5) * sh : 0),
+      this.target.y + vert + (sh > 0 ? (Math.random() - 0.5) * sh : 0),
+      this.target.z + offZ + (sh > 0 ? (Math.random() - 0.5) * sh : 0),
     );
     this.camera.lookAt(this.target);
   }
