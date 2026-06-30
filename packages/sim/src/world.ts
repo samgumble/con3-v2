@@ -1,5 +1,6 @@
 import { World, type Entity } from "@con3/ecs";
 import {
+  type Builder,
   type Building,
   type BuildingKind,
   C,
@@ -21,6 +22,7 @@ import { findPath } from "./pathfind";
 import { movementSystem } from "./systems/movement";
 import { separationSystem } from "./systems/avoidance";
 import { harvestSystem } from "./systems/harvest";
+import { constructionSystem } from "./systems/construction";
 
 /** Fixed simulation rate. The renderer interpolates between ticks. */
 export const TICK_RATE = 20;
@@ -178,6 +180,47 @@ export class GameSim {
     }
   }
 
+  /** Whether a building of `kind` fits at (x, z) without overlapping anything. */
+  canPlaceAt(kind: BuildingKind, x: number, z: number): boolean {
+    const r = BUILDINGS[kind].radius;
+    if (Math.abs(x) > MAP_HALF - r || Math.abs(z) > MAP_HALF - r) return false;
+    for (const c of this.colliders()) {
+      const gap = r + c.radius + 0.4;
+      if ((c.x - x) ** 2 + (c.z - z) ** 2 < gap * gap) return false;
+    }
+    return true;
+  }
+
+  affordable(kind: BuildingKind): boolean {
+    const def = BUILDINGS[kind];
+    return this.economy.funds >= def.costFunds && this.economy.materials >= def.costMaterials;
+  }
+
+  /**
+   * Place a blueprint if it fits and is affordable, deduct its cost, and assign
+   * the given units to build it. Returns the new entity, or 0 on failure.
+   */
+  placeBuilding(
+    kind: BuildingKind,
+    x: number,
+    z: number,
+    builders: Iterable<Entity>,
+  ): Entity {
+    if (!this.affordable(kind) || !this.canPlaceAt(kind, x, z)) return 0;
+    const def = BUILDINGS[kind];
+    this.economy.funds -= def.costFunds;
+    this.economy.materials -= def.costMaterials;
+    const e = this.spawnBuilding(kind, x, z, false);
+    for (const b of builders) {
+      const u = this.world.get<Unit>(b, C.Unit);
+      if (!u || !HARVEST_KINDS.has(u.kind)) continue; // workers/excavators build
+      this.world.remove(b, C.Harvester);
+      this.world.remove(b, C.PathFollow);
+      this.world.add<Builder>(b, C.Builder, { targetId: e });
+    }
+    return e;
+  }
+
   /** Resource node whose footprint contains (x, z), or 0. */
   nodeAt(x: number, z: number): Entity {
     for (const e of this.world.query(C.ResourceNode, C.Transform)) {
@@ -186,6 +229,33 @@ export class GameSim {
       if ((t.x - x) ** 2 + (t.z - z) ** 2 <= (n.radius + 0.8) ** 2) return e;
     }
     return 0;
+  }
+
+  /** Building whose footprint contains (x, z), or 0. */
+  buildingAt(x: number, z: number): Entity {
+    for (const e of this.world.query(C.Building, C.Transform)) {
+      const t = this.world.get<Transform>(e, C.Transform)!;
+      const b = this.world.get<Building>(e, C.Building)!;
+      if ((t.x - x) ** 2 + (t.z - z) ** 2 <= (b.radius + 0.8) ** 2) return e;
+    }
+    return 0;
+  }
+
+  /** Assign units to help build an in-progress blueprint. */
+  assignBuild(entities: Iterable<Entity>, buildingId: Entity): boolean {
+    if (!this.world.isAlive(buildingId) || !this.world.has(buildingId, C.Construction)) {
+      return false;
+    }
+    let any = false;
+    for (const e of entities) {
+      const u = this.world.get<Unit>(e, C.Unit);
+      if (!u || !HARVEST_KINDS.has(u.kind)) continue;
+      this.world.remove(e, C.Harvester);
+      this.world.remove(e, C.PathFollow);
+      this.world.add<Builder>(e, C.Builder, { targetId: buildingId });
+      any = true;
+    }
+    return any;
   }
 
   setSelected(entities: Set<Entity>): void {
@@ -222,6 +292,7 @@ export class GameSim {
     movementSystem(this.world, this.grid, colliders, TICK_DT);
     separationSystem(this.world, colliders);
     harvestSystem(this.world, this.grid, this.economy, TICK_DT);
+    constructionSystem(this.world, this.grid, TICK_DT, (e) => this.completeBuilding(e));
     this.economy.laborUsed = this.world.query(C.Unit).length;
     this.tick++;
   }

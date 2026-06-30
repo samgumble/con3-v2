@@ -1,6 +1,6 @@
 import "./style.css";
 import { GameView } from "@con3/engine";
-import { GameSim, TICK_DT, type Entity } from "@con3/sim";
+import { BUILDINGS, type BuildingKind, GameSim, TICK_DT, type Entity } from "@con3/sim";
 
 const app = document.getElementById("app")!;
 
@@ -44,9 +44,58 @@ let pointerInside = false;
 const canvas = view.renderer.domElement;
 const CLICK_THRESHOLD = 6; // px — below this a drag counts as a click
 
+// --- Build mode -----------------------------------------------------------
+const BUILDABLE: BuildingKind[] = ["trailer", "depot", "workshop"];
+let buildMode: BuildingKind | null = null;
+const buildBtns = new Map<BuildingKind, HTMLButtonElement>();
+
+const buildBtnsEl = document.querySelector("#buildbar .build-btns")!;
+for (const kind of BUILDABLE) {
+  const def = BUILDINGS[kind];
+  const btn = document.createElement("button");
+  btn.className = "build-btn";
+  const cost: string[] = [];
+  if (def.costFunds) cost.push(`<span class="f">${def.costFunds}</span>`);
+  if (def.costMaterials) cost.push(`<b>${def.costMaterials}</b>`);
+  const name = kind[0].toUpperCase() + kind.slice(1);
+  btn.innerHTML = `<span>${name}</span><span class="cost">${cost.join(" ")}</span>`;
+  btn.addEventListener("click", () => toggleBuild(kind));
+  buildBtnsEl.appendChild(btn);
+  buildBtns.set(kind, btn);
+}
+
+function toggleBuild(kind: BuildingKind): void {
+  if (buildMode === kind) {
+    exitBuild();
+    return;
+  }
+  buildMode = kind;
+  view.showGhost(kind, BUILDINGS[kind].radius);
+  for (const [k, b] of buildBtns) b.classList.toggle("active", k === kind);
+}
+
+function exitBuild(): void {
+  buildMode = null;
+  view.hideGhost();
+  for (const b of buildBtns.values()) b.classList.remove("active");
+}
+
 canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
 canvas.addEventListener("mousedown", (e) => {
+  // In build mode, left-click places and right-click cancels.
+  if (buildMode) {
+    if (e.button === 0) {
+      const p = view.worldFromScreen(e.clientX, e.clientY);
+      if (p && sim.placeBuilding(buildMode, p.x, p.z, selected) && !e.shiftKey) {
+        exitBuild();
+      }
+    } else if (e.button === 2) {
+      exitBuild();
+    }
+    return;
+  }
+
   if (e.button === 0) {
     dragging = true;
     startX = e.clientX;
@@ -54,20 +103,37 @@ canvas.addEventListener("mousedown", (e) => {
     selBox.style.display = "block";
     updateSelBox(e.clientX, e.clientY);
   } else if (e.button === 2) {
-    // Right-click: gather a deposit if one was clicked, otherwise move.
+    // Right-click: build an in-progress site, gather a deposit, or move.
     const p = view.worldFromScreen(e.clientX, e.clientY);
     if (p && selected.size > 0) {
+      const bld = sim.buildingAt(p.x, p.z);
       const node = sim.nodeAt(p.x, p.z);
-      if (node) sim.assignHarvest(selected, node);
-      else sim.commandMove(selected, p.x, p.z);
+      if (bld && sim.assignBuild(selected, bld)) {
+        // assigned to construct
+      } else if (node) {
+        sim.assignHarvest(selected, node);
+      } else {
+        sim.commandMove(selected, p.x, p.z);
+      }
     }
   }
+});
+
+window.addEventListener("keydown", (e) => {
+  if (e.key === "Escape") exitBuild();
 });
 
 window.addEventListener("mousemove", (e) => {
   pointer.x = e.clientX;
   pointer.y = e.clientY;
   pointerInside = true;
+  if (buildMode) {
+    const p = view.worldFromScreen(e.clientX, e.clientY);
+    if (p) {
+      const valid = sim.canPlaceAt(buildMode, p.x, p.z) && sim.affordable(buildMode);
+      view.updateGhost(p.x, p.z, valid);
+    }
+  }
   if (dragging) updateSelBox(e.clientX, e.clientY);
 });
 
@@ -145,6 +211,9 @@ function updateHud(): void {
   resFunds.textContent = String(Math.floor(eco.funds));
   resMaterials.textContent = String(Math.floor(eco.materials));
   resLabor.textContent = `${eco.laborUsed}/${eco.laborCap}`;
+  for (const [kind, btn] of buildBtns) {
+    btn.classList.toggle("dim", !sim.affordable(kind));
+  }
 }
 
 window.addEventListener("resize", () => {

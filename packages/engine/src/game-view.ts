@@ -99,6 +99,7 @@ export class GameView {
   private readonly ringMesh: THREE.InstancedMesh;
   private readonly buildings = new Map<number, BuildingVisual>();
   private readonly nodes = new Map<number, NodeVisual>();
+  private ghost: { group: THREE.Group; mats: THREE.MeshStandardMaterial[] } | null = null;
 
   private readonly raycaster = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -300,6 +301,50 @@ export class GameView {
         this.buildings.delete(id);
       }
     }
+  }
+
+  /** Show a translucent placement ghost for a building of `kind`. */
+  showGhost(kind: string, radius: number): void {
+    this.hideGhost();
+    const group = buildBuildingMesh(kind, radius, 1);
+    const mats: THREE.MeshStandardMaterial[] = [];
+    group.traverse((o) => {
+      if (o instanceof THREE.Mesh) {
+        const m = new THREE.MeshStandardMaterial({
+          color: 0x53ff7a,
+          transparent: true,
+          opacity: 0.45,
+          depthWrite: false,
+        });
+        o.material = m;
+        o.castShadow = false;
+        mats.push(m);
+      }
+    });
+    // Footprint ring.
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(radius * 0.95, radius * 1.15, 28),
+      new THREE.MeshBasicMaterial({ color: 0x53ff7a, side: THREE.DoubleSide, transparent: true, opacity: 0.6 }),
+    );
+    ring.rotation.x = -Math.PI / 2;
+    ring.position.y = 0.04;
+    group.add(ring);
+    this.scene.add(group);
+    this.ghost = { group, mats };
+  }
+
+  /** Move the ghost and tint it by validity. */
+  updateGhost(x: number, z: number, valid: boolean): void {
+    if (!this.ghost) return;
+    this.ghost.group.position.set(x, 0, z);
+    const color = valid ? 0x53ff7a : 0xff5340;
+    for (const m of this.ghost.mats) m.color.setHex(color);
+  }
+
+  hideGhost(): void {
+    if (!this.ghost) return;
+    this.scene.remove(this.ghost.group);
+    this.ghost = null;
   }
 
   /** Create/update/remove deposit meshes; scale by remaining amount. */

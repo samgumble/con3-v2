@@ -126,3 +126,65 @@ body,
   background: #4f9be0;
   border-radius: 50%;
 }
+
+#buildbar {
+  position: fixed;
+  right: 16px;
+  bottom: 16px;
+  padding: 12px 14px;
+  background: rgba(16, 20, 26, 0.82);
+  border: 1px solid rgba(255, 226, 77, 0.25);
+  border-radius: 10px;
+  backdrop-filter: blur(6px);
+  user-select: none;
+}
+#buildbar .build-title {
+  font-size: 12px;
+  font-weight: 700;
+  letter-spacing: 2px;
+  color: #8a97a5;
+  margin-bottom: 8px;
+}
+#buildbar .build-btns {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+.build-btn {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 14px;
+  min-width: 168px;
+  padding: 8px 11px;
+  border: 1px solid rgba(255, 255, 255, 0.14);
+  border-radius: 7px;
+  background: rgba(40, 48, 58, 0.9);
+  color: #e8edf2;
+  font: inherit;
+  font-size: 13px;
+  cursor: pointer;
+  transition: border-color 0.12s, background 0.12s;
+}
+.build-btn:hover {
+  border-color: rgba(255, 226, 77, 0.6);
+  background: rgba(54, 64, 78, 0.95);
+}
+.build-btn.active {
+  border-color: #ffe24d;
+  background: rgba(80, 70, 30, 0.95);
+}
+.build-btn.dim {
+  opacity: 0.4;
+}
+.build-btn .cost {
+  font-size: 11px;
+  color: #b9c2cc;
+  font-variant-numeric: tabular-nums;
+}
+.build-btn .cost b {
+  color: #c9a14a;
+}
+.build-btn .cost .f {
+  color: #5bd06a;
+}

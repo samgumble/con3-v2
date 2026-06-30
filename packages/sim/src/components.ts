@@ -102,6 +102,11 @@ export interface Harvester {
   timer: number; // counts down during mining/unloading
 }
 
+/** Assigns a unit to construct a building blueprint. */
+export interface Builder {
+  targetId: number; // building entity under construction
+}
+
 /** Player resource pools. */
 export interface Economy {
   funds: number;
@@ -121,4 +126,5 @@ export const C = {
   DropOff: "DropOff",
   ResourceNode: "ResourceNode",
   Harvester: "Harvester",
+  Builder: "Builder",
 } as const;
