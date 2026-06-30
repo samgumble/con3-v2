@@ -5,6 +5,8 @@ company. Built with Three.js + a custom ECS, deterministic fixed-timestep
 simulation, and a Vite/TypeScript pnpm monorepo. See [PLAN.md](PLAN.md) for the
 full design and roadmap.
 
+▶ **[Play now](https://samgumble.github.io/con3-v2/)** &nbsp;·&nbsp; 📖 **New here? Read the [Player's Guide](GUIDE.md)** — how to win, what each unit does, buildings, controls, and a solid opening.
+
 ## Status: Phase 0 — Foundation ✅
 
 A runnable sandbox proving the core engine:

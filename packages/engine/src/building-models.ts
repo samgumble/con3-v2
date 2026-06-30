@@ -13,6 +13,11 @@ const ORANGE = 0xf2622a;
 const BLUE = 0x3f7bd6;
 const YELLOW = 0xffd84d;
 const CONCRETE = 0xb8b2a6;
+const GLASS = 0x77b1dd; // window glazing
+const TIMBER = 0xb07a43; // timber stacks / retaining boards
+const RUST = 0xa65f38; // oil drums, weathered steel
+const TIRE = 0x1c1f22; // tyres / rubber
+const CATY = 0xf5b51a; // machine yellow (deeper than safety yellow)
 
 function mat(color: number, rough = 0.85): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, roughness: rough, flatShading: true });
@@ -28,6 +33,23 @@ function box(
   z = 0,
 ): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
+  m.position.set(x, y, z);
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
+function cyl(
+  rt: number,
+  rb: number,
+  h: number,
+  color: number,
+  x = 0,
+  y = 0,
+  z = 0,
+  seg = 10,
+): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat(color));
   m.position.set(x, y, z);
   m.castShadow = true;
   m.receiveShadow = true;
@@ -56,21 +78,49 @@ function buildFinished(kind: string, r: number): THREE.Group {
       break;
     }
     case "trailer": {
-      g.add(box(r * 2.3, 1.0, r * 1.2, WHITE, 0, 0.7, 0));
-      g.add(box(r * 2.35, 0.18, r * 1.25, BLUE, 0, 1.25, 0)); // roof trim
-      g.add(box(r * 2.32, 0.22, r * 1.22, BLUE, 0, 0.55, 0)); // side stripe
-      g.add(box(r * 2.0, 0.25, r * 0.9, DARK, 0, 0.2, 0)); // chassis
+      // Stacked modular site-accommodation cabins (worker housing).
+      const cabin = (cy: number, w: number, d: number, body: number) => {
+        g.add(box(w, 0.95, d, body, 0, cy, 0));
+        g.add(box(w + 0.05, 0.16, d + 0.05, BLUE, 0, cy - 0.32, 0)); // skirt stripe
+        g.add(box(w + 0.06, 0.12, d + 0.06, BLUE, 0, cy + 0.5, 0)); // eave trim
+        for (let i = -1; i <= 1; i++) {
+          g.add(box(0.46, 0.42, 0.06, GLASS, i * w * 0.27, cy + 0.05, d / 2)); // windows
+        }
+      };
+      g.add(box(r * 2.0, 0.22, r * 1.05, DARK, 0, 0.13, 0)); // chassis skids
+      cabin(0.72, r * 2.3, r * 1.25, WHITE); // lower unit
+      cabin(1.7, r * 2.1, r * 1.15, 0xf0f2f5); // upper unit (inset, lighter)
+      g.add(box(r * 2.15, 0.12, r * 1.2, DARK, 0, 2.22, 0)); // roof cap
+      g.add(box(0.5, 0.34, 0.6, STEEL, r * 0.6, 2.45, -r * 0.2)); // rooftop AC unit
+      // External staircase up to the upper unit (−X end).
+      for (let s = 0; s < 4; s++) {
+        g.add(box(0.5, 0.12, 0.42, DARK, -r * 1.2, 0.42 + s * 0.3, -r * 0.4 + s * 0.22));
+      }
+      g.add(box(0.05, 0.9, 1.3, YELLOW, -r * 1.0, 1.7, 0)); // handrail
+      g.add(box(0.7, 0.85, 0.1, DARK, r * 0.45, 1.07, r * 0.61)); // door
       break;
     }
     case "depot": {
-      // Open shed: four posts + roof.
-      const post = (x: number, z: number) => box(0.22, 2.0, 0.22, STEEL, x, 1.0, z);
-      g.add(post(-r * 0.8, -r * 0.8));
-      g.add(post(r * 0.8, -r * 0.8));
-      g.add(post(-r * 0.8, r * 0.8));
-      g.add(post(r * 0.8, r * 0.8));
-      g.add(box(r * 2.0, 0.22, r * 2.0, ORANGE, 0, 2.1, 0)); // roof
-      g.add(box(r * 1.1, 0.6, r * 1.1, YELLOW, 0, 0.3, 0)); // stacked materials
+      // Open steel canopy sheltering stacked site materials (storage yard).
+      const post = (x: number, z: number) => box(0.2, 2.1, 0.2, STEEL, x, 1.05, z);
+      for (const sx of [-r * 0.85, r * 0.85]) for (const sz of [-r * 0.85, r * 0.85]) g.add(post(sx, sz));
+      g.add(box(r * 2.15, 0.18, r * 2.15, ORANGE, 0, 2.2, 0)); // canopy roof
+      g.add(box(r * 2.2, 0.1, 0.18, YELLOW, 0, 2.33, 0)); // ridge cap
+      g.add(box(r * 1.7, 0.1, 0.1, STEEL, 0, 1.85, -r * 0.85)); // cross-brace
+      // Timber retaining bay (two low walls).
+      g.add(box(r * 1.9, 0.5, 0.14, TIMBER, 0, 0.25, -r * 0.78));
+      g.add(box(0.14, 0.5, r * 1.7, TIMBER, -r * 0.78, 0.25, 0));
+      // Timber stack.
+      for (let i = 0; i < 3; i++) g.add(box(0.8, 0.18, r * 1.2, TIMBER, -r * 0.4, 0.35 + i * 0.2, r * 0.1));
+      // Pallet of blocks/sacks.
+      g.add(box(0.72, 0.12, 0.72, TIMBER, r * 0.55, 0.18, -r * 0.25));
+      g.add(box(0.6, 0.42, 0.6, CONCRETE, r * 0.55, 0.45, -r * 0.25));
+      // Pipe bundle (run front-to-back under the canopy).
+      for (const [pz, py] of [[-0.18, 0], [0.18, 0], [0, 0.3]] as const) {
+        const p = cyl(0.15, 0.15, r * 1.5, STEEL, r * 0.5, 0.32 + py, r * 0.45 + pz, 8);
+        p.rotation.x = Math.PI / 2;
+        g.add(p);
+      }
       break;
     }
     case "fieldOffice": {
@@ -85,30 +135,80 @@ function buildFinished(kind: string, r: number): THREE.Group {
       break;
     }
     case "permitOffice": {
-      // Civic tower: tall narrow office with a blue roof + a sign board.
-      g.add(box(r * 1.4, 2.8, r * 1.4, WHITE, 0, 1.4, 0));
-      g.add(box(r * 1.5, 0.3, r * 1.5, BLUE, 0, 2.9, 0)); // roof
-      g.add(box(r * 1.42, 0.5, r * 1.42, BLUE, 0, 0.5, 0)); // base band
-      // Sign post + board out front.
-      g.add(box(0.12, 1.4, 0.12, DARK, 0, 0.7, r * 1.1));
-      g.add(box(0.9, 0.6, 0.1, YELLOW, 0, 1.5, r * 1.15)); // permit board
+      // Civic permit office: columned portico, blue roof, flag, sign board.
+      g.add(box(r * 1.5, 2.4, r * 1.3, WHITE, 0, 1.4, 0)); // main block
+      g.add(box(r * 1.62, 0.28, r * 1.42, BLUE, 0, 2.74, 0)); // roof
+      g.add(box(r * 1.52, 0.4, r * 1.32, CONCRETE, 0, 0.4, 0)); // plinth
+      // Window grid (2 rows × 3) on the facade.
+      for (let row = 0; row < 2; row++) for (let col = -1; col <= 1; col++) {
+        g.add(box(0.4, 0.5, 0.06, GLASS, col * r * 0.4, 1.35 + row * 0.7, r * 0.66));
+      }
+      // Portico: four columns + entablature out front (+Z).
+      const colZ = r * 0.95;
+      for (const cx of [-r * 0.6, -r * 0.2, r * 0.2, r * 0.6]) g.add(cyl(0.13, 0.15, 1.9, WHITE, cx, 0.95, colZ, 10));
+      g.add(box(r * 1.5, 0.28, 0.3, WHITE, 0, 2.05, colZ)); // architrave
+      g.add(box(r * 1.5, 0.34, 0.34, BLUE, 0, 2.34, colZ)); // pediment band
+      // Entrance steps.
+      for (let s = 0; s < 3; s++) g.add(box(r * 1.1 - s * 0.3, 0.14, 0.4, CONCRETE, 0, 0.14 + s * 0.14, colZ + 0.5 - s * 0.12));
+      g.add(box(0.7, 1.1, 0.1, DARK, 0, 0.75, r * 0.66)); // door
+      // Flag pole + flag.
+      g.add(cyl(0.05, 0.05, 2.6, STEEL, -r * 0.9, 1.5, -r * 0.3, 6));
+      g.add(box(0.5, 0.32, 0.05, BLUE, -r * 0.9 + 0.27, 2.6, -r * 0.3));
+      // "PERMITS" sign board.
+      g.add(box(0.12, 1.2, 0.12, DARK, r * 0.9, 0.6, r * 1.2));
+      g.add(box(1.0, 0.55, 0.1, YELLOW, r * 0.9, 1.35, r * 1.25));
       break;
     }
     case "craneYard": {
-      // Industrial pad with a tall tower-crane structure.
-      g.add(box(r * 1.9, 0.4, r * 1.9, STEEL, 0, 0.2, 0)); // concrete pad
-      g.add(box(r * 0.7, 0.6, r * 0.7, ORANGE, -r * 0.5, 0.5, -r * 0.5)); // equipment shed
-      // Tower crane.
-      g.add(box(0.3, 3.4, 0.3, YELLOW, r * 0.4, 1.9, r * 0.4)); // mast
-      g.add(box(0.22, 0.2, 3.0, YELLOW, r * 0.4, 3.6, r * 0.4 + 0.9)); // jib
-      g.add(box(0.4, 0.4, 0.8, DARK, r * 0.4, 3.6, r * 0.4 - 0.9)); // counterweight
+      // Heavy-equipment yard that assembles tower cranes.
+      g.add(box(r * 1.95, 0.4, r * 1.95, STEEL, 0, 0.2, 0)); // concrete pad
+      g.add(box(r * 1.95, 0.06, 0.3, YELLOW, 0, 0.43, r * 0.85)); // hazard-stripe edge
+      // Compact lattice tower crane on the pad.
+      const bx = r * 0.35;
+      const bz = -r * 0.25;
+      g.add(box(1.0, 0.4, 1.0, STEEL, bx, 0.45, bz)); // ballast
+      const mh = 5.0;
+      const segs = 5;
+      for (let i = 0; i < segs; i++) g.add(box(0.34, mh / segs - 0.1, 0.34, YELLOW, bx, 0.65 + (i + 0.5) * (mh / segs), bz));
+      const ty = 0.65 + mh;
+      g.add(box(0.62, 0.55, 0.62, YELLOW, bx, ty, bz)); // slewing unit
+      g.add(box(0.5, 0.45, 0.55, DARK, bx + 0.1, ty + 0.45, bz + 0.4)); // operator cab
+      g.add(box(4.6, 0.18, 0.28, YELLOW, bx + 1.9, ty + 0.45, bz)); // working jib
+      g.add(box(1.6, 0.18, 0.28, YELLOW, bx - 0.9, ty + 0.45, bz)); // counter-jib
+      g.add(box(0.6, 0.7, 0.6, DARK, bx - 1.65, ty + 0.3, bz)); // counterweight
+      g.add(box(0.04, 1.8, 0.04, DARK, bx + 3.4, ty - 0.45, bz)); // hook line
+      g.add(box(0.26, 0.3, 0.26, DARK, bx + 3.4, ty - 1.45, bz)); // hook block
+      // Spare lattice mast sections stacked on the ground.
+      for (let i = 0; i < 3; i++) g.add(box(0.55, 0.5, 1.7, CATY, -r * 0.95, 0.5, -r * 0.55 - i * 0.62));
+      // Counterweight blocks.
+      for (let i = 0; i < 2; i++) g.add(box(1.0, 0.4, 0.7, DARK, -r * 1.1, 0.6 + i * 0.42, r * 0.75));
+      // Shipping container of rigging gear.
+      g.add(box(r * 0.95, 0.8, r * 0.6, BLUE, r * 0.75, 0.6, r * 0.95));
+      g.add(box(r * 0.97, 0.06, r * 0.62, DARK, r * 0.75, 1.0, r * 0.95));
       break;
     }
     default: {
-      // workshop: garage box with a roll-up door on +Z.
-      g.add(box(r * 1.9, 2.0, r * 1.7, STEEL, 0, 1.0, 0));
-      g.add(box(r * 2.0, 0.3, r * 1.8, DARK, 0, 2.1, 0));
-      g.add(box(r * 1.1, 1.3, 0.12, ORANGE, 0, 0.75, r * 0.86)); // door
+      // Equipment workshop/garage — services & builds excavators. CAT-yellow theme.
+      g.add(box(r * 1.9, 1.9, r * 1.7, STEEL, 0, 0.95, 0)); // shed body
+      // Gable roof (two pitched panels) + ridge beam.
+      const roofL = box(r * 1.15, 0.14, r * 1.85, DARK, -r * 0.5, 2.12, 0);
+      roofL.rotation.z = 0.42;
+      g.add(roofL);
+      const roofR = box(r * 1.15, 0.14, r * 1.85, DARK, r * 0.5, 2.12, 0);
+      roofR.rotation.z = -0.42;
+      g.add(roofR);
+      g.add(box(0.16, 0.16, r * 1.9, YELLOW, 0, 2.52, 0)); // ridge beam
+      g.add(box(r * 1.94, 0.22, r * 1.74, YELLOW, 0, 1.75, 0)); // hi-vis hazard band
+      // Two roll-up bay doors on +Z, with slat lines.
+      for (const dx of [-r * 0.5, r * 0.5]) {
+        g.add(box(r * 0.72, 1.3, 0.1, CATY, dx, 0.75, r * 0.86));
+        for (let i = 0; i < 4; i++) g.add(box(r * 0.72, 0.04, 0.12, DARK, dx, 0.35 + i * 0.32, r * 0.87));
+      }
+      g.add(cyl(0.18, 0.2, 0.7, STEEL, r * 0.6, 2.7, -r * 0.4, 8)); // roof vent/flue
+      // Yard clutter: oil drums + a tyre stack beside the shed.
+      g.add(cyl(0.3, 0.3, 0.7, RUST, -r * 1.3, 0.35, r * 0.4, 10));
+      g.add(cyl(0.3, 0.3, 0.7, BLUE, -r * 1.3, 0.35, -r * 0.15, 10));
+      for (let i = 0; i < 3; i++) g.add(cyl(0.42, 0.42, 0.2, TIRE, r * 1.25, 0.12 + i * 0.2, r * 0.5, 12));
     }
   }
   return g;

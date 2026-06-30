@@ -1,7 +1,8 @@
 # Con3 — Session Handoff
 
 Dense knowledge transfer so a fresh session can work effectively with no prior
-context. For the original plan see [PLAN.md](PLAN.md); to run see [README.md](README.md).
+context. For the original plan see [PLAN.md](PLAN.md); to run see [README.md](README.md);
+for the player-facing rules/strategy see [GUIDE.md](GUIDE.md).
 
 _Updated: 2026-06-30._
 
@@ -173,7 +174,10 @@ octile, binary heap, no corner-cutting). `spatial-hash.ts` = neighbor queries.
   camera's ground axes (correct at every yaw).
 - **unit-models.ts** — merged vertex-colored low-poly geometry per kind (hi-vis
   worker, CAT-yellow excavator, mobile crane). Swap point for real glTF.
-- **building-models.ts** — `buildBuildingMesh` (support buildings + field office),
+- **building-models.ts** — `buildBuildingMesh` → `buildFinished` (each support
+  building has its own detailed mesh: trailer=stacked cabins, depot=open canopy +
+  material stacks, permitOffice=columned civic block, workshop=gable garage,
+  craneYard=lattice tower crane) / `buildUnderConstruction` (slab+scaffold),
   `buildMegaprojectMesh(phase,radius)` (the HQ; **real construction flow** —
   frame tops out first, then slabs, then glass climbs bottom-to-top, then roof/
   spire; `buildTowerCrane()` present phases 1–11), `buildDepositMesh` (aggregate
@@ -247,9 +251,8 @@ exhaust). Shipping on **GitHub Pages** (deploy unblocked — see §2/§14).
 **Rough edges / TODO ideas:** no audio; no save/load (refresh resets); HUD font
 loads from Google Fonts (CDN dependency; falls back to system condensed);
 support-building rally points not implemented; full-playthrough balance
-(~835 mats, funds payouts, tier pacing) not yet tuned against real games;
-**support buildings (trailer/depot/permitOffice/workshop/craneYard) still use the
-generic box mesh — the next obvious art task (#24).**
+(~835 mats, funds payouts, tier pacing) not yet tuned against real games. (#24
+support-building art is now DONE — each kind has a distinct detailed mesh.)
 
 **Next options:** Phase 4 — **AI opponent** (rival firm racing its own
 megaproject; `Owner` component + per-player economies are the foundation; would
@@ -259,6 +262,14 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- Support-building art pass (#24 DONE): each of trailer/depot/permitOffice/
+  workshop/craneYard now has a distinct, detailed mesh in `building-models.ts`
+  (`buildFinished`) — stacked accommodation cabins, open canopy + timber/pipe
+  stacks, columned civic office, gable-roof garage + drums/tyres, lattice tower-
+  crane yard. Added `cyl()` helper + colours (GLASS/TIMBER/RUST/TIRE/CATY).
+- Added **GUIDE.md** (player-facing: goal, core loop, unit/building tables, tiers,
+  the 12 phases, hazards, controls, opening strategy) + an in-game **GUIDE** link
+  in the top resource bar (→ GitHub-rendered guide) and a README "Play / Guide" line.
 - DEPLOY FIXED + migrated to GitHub Pages. Root cause of the failed deploys was
   NOT the token: Netlify returns 403 "account credit usage exceeded — new deploys
   are blocked until credits are added" (an account billing cap, hit after many
