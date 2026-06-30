@@ -1,5 +1,6 @@
 import * as THREE from "three";
 import { RtsCamera } from "./rts-camera";
+import { buildUnitGeometries } from "./unit-models";
 
 /** Minimal render description of a unit (decoupled from the sim package). */
 export interface RenderUnit {
@@ -20,6 +21,23 @@ export interface RenderObstacle {
   kind: "rocks" | "stockpile";
 }
 
+/** Per-unit interpolation state. Meshes are instanced, not per-entity. */
+interface UnitVisual {
+  kind: string;
+  radius: number;
+  prevX: number;
+  prevZ: number;
+  prevRot: number;
+  curX: number;
+  curZ: number;
+  curRot: number;
+  selected: boolean;
+  seen: boolean;
+}
+
+/** Max instances allocated per InstancedMesh. Plenty for an RTS skirmish. */
+const UNIT_CAP = 2048;
+
 /** Small deterministic RNG so obstacle decoration is stable across reloads. */
 function mulberry32(seed: number): () => number {
   return () => {
@@ -31,37 +49,31 @@ function mulberry32(seed: number): () => number {
   };
 }
 
-interface Visual {
-  group: THREE.Group;
-  ring: THREE.Mesh;
-  prevX: number;
-  prevZ: number;
-  prevRot: number;
-  curX: number;
-  curZ: number;
-  curRot: number;
-  seen: boolean;
-}
-
-const KIND_COLOR: Record<string, number> = {
-  worker: 0xffc24b, // hi-vis amber
-  excavator: 0xf25c2a,
-  crane: 0xffd34e,
-};
-
 /**
- * Owns the Three.js scene and renders interpolated unit state. The sim runs at
- * a fixed tick; `onTick()` records a new snapshot and `render(alpha)` draws the
- * smoothed in-between frame.
+ * Owns the Three.js scene and renders interpolated unit state. Units of each
+ * kind share one InstancedMesh (single draw call), so the renderer scales to
+ * hundreds of units. The sim runs at a fixed tick; `onTick()` records a new
+ * snapshot and `render(alpha)` draws the smoothed in-between frame.
  */
 export class GameView {
   readonly renderer: THREE.WebGLRenderer;
   readonly scene = new THREE.Scene();
   readonly cameraCtl: RtsCamera;
 
-  private readonly visuals = new Map<number, Visual>();
+  private readonly visuals = new Map<number, UnitVisual>();
+  private readonly kindMeshes = new Map<string, THREE.InstancedMesh>();
+  private readonly ringMesh: THREE.InstancedMesh;
+
   private readonly raycaster = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
+
+  // Reusable scratch objects to avoid per-frame allocation.
+  private readonly m4 = new THREE.Matrix4();
+  private readonly quat = new THREE.Quaternion();
+  private readonly up = new THREE.Vector3(0, 1, 0);
+  private readonly pos = new THREE.Vector3();
+  private readonly unitScale = new THREE.Vector3(1, 1, 1);
+  private readonly ringScale = new THREE.Vector3(1, 1, 1);
 
   constructor(private readonly container: HTMLElement) {
     const w = container.clientWidth;
@@ -77,10 +89,12 @@ export class GameView {
     this.cameraCtl = new RtsCamera(w / h, this.renderer.domElement);
 
     this.scene.background = new THREE.Color(0x1b2129);
-    this.scene.fog = new THREE.Fog(0x1b2129, 80, 180);
+    this.scene.fog = new THREE.Fog(0x1b2129, 90, 200);
 
     this.buildLighting();
     this.buildGround();
+    this.buildUnitMeshes();
+    this.ringMesh = this.buildRingMesh();
 
     window.addEventListener("resize", () => this.resize());
   }
@@ -104,22 +118,54 @@ export class GameView {
   }
 
   private buildGround(): void {
-    // Dirt-lot ground plane.
-    const groundMat = new THREE.MeshStandardMaterial({
-      color: 0x6b5d4f,
-      roughness: 1,
-    });
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x6b5d4f, roughness: 1 });
     const ground = new THREE.Mesh(new THREE.PlaneGeometry(140, 140), groundMat);
     ground.rotation.x = -Math.PI / 2;
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    // Site survey grid overlay.
     const grid = new THREE.GridHelper(140, 70, 0x3a4654, 0x2a323c);
     (grid.material as THREE.Material).opacity = 0.35;
     (grid.material as THREE.Material).transparent = true;
     grid.position.y = 0.01;
     this.scene.add(grid);
+  }
+
+  private buildUnitMeshes(): void {
+    const geoms = buildUnitGeometries();
+    for (const [kind, geo] of Object.entries(geoms)) {
+      const mat = new THREE.MeshStandardMaterial({
+        vertexColors: true,
+        flatShading: true,
+        roughness: 0.7,
+        metalness: 0.05,
+      });
+      const mesh = new THREE.InstancedMesh(geo, mat, UNIT_CAP);
+      mesh.count = 0;
+      mesh.castShadow = true;
+      mesh.receiveShadow = true;
+      mesh.frustumCulled = false; // instances move; skip per-mesh culling
+      mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+      this.scene.add(mesh);
+      this.kindMeshes.set(kind, mesh);
+    }
+  }
+
+  private buildRingMesh(): THREE.InstancedMesh {
+    const ring = new THREE.RingGeometry(1.1, 1.35, 24);
+    ring.rotateX(-Math.PI / 2);
+    const mat = new THREE.MeshBasicMaterial({
+      color: 0x53ff7a,
+      side: THREE.DoubleSide,
+      transparent: true,
+      opacity: 0.9,
+    });
+    const mesh = new THREE.InstancedMesh(ring, mat, UNIT_CAP);
+    mesh.count = 0;
+    mesh.frustumCulled = false;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.scene.add(mesh);
+    return mesh;
   }
 
   /** Build static obstacle meshes once. Call after construction. */
@@ -130,7 +176,9 @@ export class GameView {
   private buildObstacle(o: RenderObstacle): THREE.Group {
     const group = new THREE.Group();
     group.position.set(o.x, 0, o.z);
-    const rand = mulberry32(Math.floor((o.x + 1000) * 73856093) ^ Math.floor((o.z + 1000) * 19349663));
+    const rand = mulberry32(
+      Math.floor((o.x + 1000) * 73856093) ^ Math.floor((o.z + 1000) * 19349663),
+    );
 
     if (o.kind === "rocks") {
       const mat = new THREE.MeshStandardMaterial({ color: 0x8d8377, roughness: 1, flatShading: true });
@@ -148,13 +196,12 @@ export class GameView {
         group.add(rock);
       }
     } else {
-      // Stockpile: stacked material crates/bags.
       const colors = [0xc9a14a, 0x9fa6ad, 0xb5651d];
       const count = 5 + Math.floor(rand() * 4);
       for (let i = 0; i < count; i++) {
-        const s = 0.8 + rand() * 0.7;
+        const sz = 0.8 + rand() * 0.7;
         const crate = new THREE.Mesh(
-          new THREE.BoxGeometry(s, s * 0.7, s),
+          new THREE.BoxGeometry(sz, sz * 0.7, sz),
           new THREE.MeshStandardMaterial({
             color: colors[Math.floor(rand() * colors.length)],
             roughness: 0.85,
@@ -163,7 +210,11 @@ export class GameView {
         );
         const a = rand() * Math.PI * 2;
         const dr = rand() * o.radius * 0.6;
-        crate.position.set(Math.cos(a) * dr, (s * 0.7) / 2 + (rand() < 0.3 ? s * 0.7 : 0), Math.sin(a) * dr);
+        crate.position.set(
+          Math.cos(a) * dr,
+          (sz * 0.7) / 2 + (rand() < 0.3 ? sz * 0.7 : 0),
+          Math.sin(a) * dr,
+        );
         crate.rotation.y = rand() * Math.PI;
         crate.castShadow = true;
         crate.receiveShadow = true;
@@ -173,65 +224,6 @@ export class GameView {
     return group;
   }
 
-  private buildUnitVisual(u: RenderUnit): Visual {
-    const group = new THREE.Group();
-
-    const color = KIND_COLOR[u.kind] ?? 0xcccccc;
-    const bodyHeight = u.radius * 1.8;
-    const body = new THREE.Mesh(
-      new THREE.CylinderGeometry(u.radius * 0.7, u.radius * 0.9, bodyHeight, 12),
-      new THREE.MeshStandardMaterial({ color, roughness: 0.7, metalness: 0.1 }),
-    );
-    body.position.y = bodyHeight / 2;
-    body.castShadow = true;
-    group.add(body);
-
-    // A little "hard hat" cap so units read as construction crew.
-    const hat = new THREE.Mesh(
-      new THREE.SphereGeometry(u.radius * 0.55, 12, 8, 0, Math.PI * 2, 0, Math.PI / 2),
-      new THREE.MeshStandardMaterial({ color: 0xffe14d, roughness: 0.5 }),
-    );
-    hat.position.y = bodyHeight + 0.02;
-    hat.castShadow = true;
-    group.add(hat);
-
-    // Direction nub so facing is visible.
-    const nose = new THREE.Mesh(
-      new THREE.BoxGeometry(0.18, 0.18, u.radius * 0.8),
-      new THREE.MeshStandardMaterial({ color: 0x222222 }),
-    );
-    nose.position.set(0, bodyHeight * 0.6, u.radius * 0.8);
-    group.add(nose);
-
-    // Selection ring on the ground.
-    const ring = new THREE.Mesh(
-      new THREE.RingGeometry(u.radius * 1.1, u.radius * 1.35, 24),
-      new THREE.MeshBasicMaterial({
-        color: 0x53ff7a,
-        side: THREE.DoubleSide,
-        transparent: true,
-        opacity: 0.9,
-      }),
-    );
-    ring.rotation.x = -Math.PI / 2;
-    ring.position.y = 0.02;
-    ring.visible = false;
-    group.add(ring);
-
-    this.scene.add(group);
-    return {
-      group,
-      ring,
-      prevX: u.x,
-      prevZ: u.z,
-      prevRot: u.rot,
-      curX: u.x,
-      curZ: u.z,
-      curRot: u.rot,
-      seen: true,
-    };
-  }
-
   /** Record a fresh sim snapshot. Shifts current → previous for interpolation. */
   onTick(units: RenderUnit[]): void {
     for (const v of this.visuals.values()) v.seen = false;
@@ -239,7 +231,18 @@ export class GameView {
     for (const u of units) {
       let v = this.visuals.get(u.id);
       if (!v) {
-        v = this.buildUnitVisual(u);
+        v = {
+          kind: u.kind,
+          radius: u.radius,
+          prevX: u.x,
+          prevZ: u.z,
+          prevRot: u.rot,
+          curX: u.x,
+          curZ: u.z,
+          curRot: u.rot,
+          selected: u.selected,
+          seen: true,
+        };
         this.visuals.set(u.id, v);
       } else {
         v.prevX = v.curX;
@@ -248,28 +251,60 @@ export class GameView {
         v.curX = u.x;
         v.curZ = u.z;
         v.curRot = u.rot;
+        v.kind = u.kind;
+        v.radius = u.radius;
+        v.selected = u.selected;
+        v.seen = true;
       }
-      v.ring.visible = u.selected;
-      v.seen = true;
     }
 
     for (const [id, v] of this.visuals) {
-      if (!v.seen) {
-        this.scene.remove(v.group);
-        this.visuals.delete(id);
-      }
+      if (!v.seen) this.visuals.delete(id);
     }
   }
 
   /** Draw an interpolated frame. `alpha` is the fraction into the current tick. */
-  render(alpha: number, dt: number, pointer?: { x: number; y: number; w: number; h: number }): void {
+  render(
+    alpha: number,
+    dt: number,
+    pointer?: { x: number; y: number; w: number; h: number },
+  ): void {
     this.cameraCtl.update(dt, pointer);
 
+    const counters = new Map<string, number>();
+    for (const kind of this.kindMeshes.keys()) counters.set(kind, 0);
+    let ringCount = 0;
+
     for (const v of this.visuals.values()) {
-      v.group.position.x = v.prevX + (v.curX - v.prevX) * alpha;
-      v.group.position.z = v.prevZ + (v.curZ - v.prevZ) * alpha;
-      v.group.rotation.y = lerpAngle(v.prevRot, v.curRot, alpha);
+      const x = v.prevX + (v.curX - v.prevX) * alpha;
+      const z = v.prevZ + (v.curZ - v.prevZ) * alpha;
+      const rot = lerpAngle(v.prevRot, v.curRot, alpha);
+
+      const mesh = this.kindMeshes.get(v.kind);
+      if (mesh) {
+        const idx = counters.get(v.kind)!;
+        this.quat.setFromAxisAngle(this.up, rot);
+        this.pos.set(x, 0, z);
+        this.m4.compose(this.pos, this.quat, this.unitScale);
+        mesh.setMatrixAt(idx, this.m4);
+        counters.set(v.kind, idx + 1);
+      }
+
+      if (v.selected) {
+        this.quat.identity();
+        this.pos.set(x, 0.02, z);
+        this.ringScale.set(v.radius, 1, v.radius);
+        this.m4.compose(this.pos, this.quat, this.ringScale);
+        this.ringMesh.setMatrixAt(ringCount++, this.m4);
+      }
     }
+
+    for (const [kind, mesh] of this.kindMeshes) {
+      mesh.count = counters.get(kind)!;
+      mesh.instanceMatrix.needsUpdate = true;
+    }
+    this.ringMesh.count = ringCount;
+    this.ringMesh.instanceMatrix.needsUpdate = true;
 
     this.renderer.render(this.scene, this.cameraCtl.camera);
   }

@@ -20,6 +20,9 @@ importers:
       '@con3/sim':
         specifier: workspace:*
         version: link:../../packages/sim
+      three:
+        specifier: ^0.169.0
+        version: 0.169.0
     devDependencies:
       typescript:
         specifier: ^5.6.3
