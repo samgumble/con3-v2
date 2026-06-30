@@ -229,6 +229,12 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- Graphics 10x: ACES tone mapping + UnrealBloom post-processing; hazard weather
+  (rain streaks + lightning flashes + per-hazard atmospheres) via
+  GameView.setWeather(); unit motion-bob + slewing HQ tower crane; carried-
+  material crates on haulers. NOTE: Netlify deploys are FAILING (Forbidden) since
+  ~03:21 — the Netlify token was revoked/expired; needs a fresh token in the
+  NETLIFY_AUTH_TOKEN GH secret. All work is on GitHub + runs locally.
 - CAT-dashboard HUD re-skin (brushed steel, rivets, hazard stripes, LED type).
 - Gameplay depth: distinct unit roles (worker/excavator/crane) + economy loop
   (material storage cap, Funds from HQ phase completions, crane-gated tall phases).

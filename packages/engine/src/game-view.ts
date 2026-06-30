@@ -17,6 +17,7 @@ export interface RenderUnit {
   kind: string;
   radius: number;
   selected: boolean;
+  carrying?: number; // materials being hauled (shows a load on the unit)
 }
 
 /** Static map obstacle to render (rock pile or material stockpile). */
@@ -74,6 +75,7 @@ interface UnitVisual {
   curZ: number;
   curRot: number;
   selected: boolean;
+  carrying: number;
   seen: boolean;
 }
 
@@ -107,6 +109,7 @@ export class GameView {
   private readonly visuals = new Map<number, UnitVisual>();
   private readonly kindMeshes = new Map<string, THREE.InstancedMesh>();
   private readonly ringMesh: THREE.InstancedMesh;
+  private readonly loadMesh: THREE.InstancedMesh;
   private readonly buildings = new Map<number, BuildingVisual>();
   private readonly nodes = new Map<number, NodeVisual>();
   private ghost: { group: THREE.Group; mats: THREE.MeshStandardMaterial[] } | null = null;
@@ -159,6 +162,7 @@ export class GameView {
     this.scene.add(buildSiteDecor(60));
     this.buildUnitMeshes();
     this.ringMesh = this.buildRingMesh();
+    this.loadMesh = this.buildLoadMesh();
 
     // Post-processing: filmic tone mapping + a soft bloom so the sun, hi-vis
     // equipment, and lightning glow.
@@ -360,6 +364,19 @@ export class GameView {
     });
     const mesh = new THREE.InstancedMesh(ring, mat, UNIT_CAP);
     mesh.count = 0;
+    mesh.frustumCulled = false;
+    mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
+    this.scene.add(mesh);
+    return mesh;
+  }
+
+  /** Small material crate shown above units that are hauling. */
+  private buildLoadMesh(): THREE.InstancedMesh {
+    const geo = new THREE.BoxGeometry(0.5, 0.34, 0.5);
+    const mat = new THREE.MeshStandardMaterial({ color: 0xc9a14a, roughness: 0.9, flatShading: true });
+    const mesh = new THREE.InstancedMesh(geo, mat, UNIT_CAP);
+    mesh.count = 0;
+    mesh.castShadow = true;
     mesh.frustumCulled = false;
     mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage);
     this.scene.add(mesh);
@@ -592,6 +609,7 @@ export class GameView {
           curZ: u.z,
           curRot: u.rot,
           selected: u.selected,
+          carrying: u.carrying ?? 0,
           seen: true,
         };
         this.visuals.set(u.id, v);
@@ -605,6 +623,7 @@ export class GameView {
         v.kind = u.kind;
         v.radius = u.radius;
         v.selected = u.selected;
+        v.carrying = u.carrying ?? 0;
         v.seen = true;
       }
     }
@@ -628,21 +647,22 @@ export class GameView {
     const counters = new Map<string, number>();
     for (const kind of this.kindMeshes.keys()) counters.set(kind, 0);
     let ringCount = 0;
+    let loadCount = 0;
 
     for (const [id, v] of this.visuals) {
       const x = v.prevX + (v.curX - v.prevX) * alpha;
       const z = v.prevZ + (v.curZ - v.prevZ) * alpha;
       const rot = lerpAngle(v.prevRot, v.curRot, alpha);
       const moving = Math.abs(v.curX - v.prevX) + Math.abs(v.curZ - v.prevZ) > 0.005;
+      // Liveliness: walkers bounce, vehicles jostle, everything idle-sways.
+      const amp = v.kind === "worker" ? 0.07 : 0.03;
+      const bob = moving
+        ? Math.abs(Math.sin(this.elapsed * 9 + id * 1.7)) * amp
+        : Math.sin(this.elapsed * 1.6 + id) * 0.012;
 
       const mesh = this.kindMeshes.get(v.kind);
       if (mesh) {
         const idx = counters.get(v.kind)!;
-        // Liveliness: walkers bounce, vehicles jostle, everything idle-sways.
-        const amp = v.kind === "worker" ? 0.07 : 0.03;
-        const bob = moving
-          ? Math.abs(Math.sin(this.elapsed * 9 + id * 1.7)) * amp
-          : Math.sin(this.elapsed * 1.6 + id) * 0.012;
         const tilt = moving ? Math.sin(this.elapsed * 9 + id * 1.7) * 0.04 : 0;
         this.quat.setFromEuler(this.euler.set(tilt, rot, 0));
         this.pos.set(x, bob, z);
@@ -658,6 +678,13 @@ export class GameView {
         this.m4.compose(this.pos, this.quat, this.ringScale);
         this.ringMesh.setMatrixAt(ringCount++, this.m4);
       }
+
+      if (v.carrying > 0) {
+        this.quat.setFromEuler(this.euler.set(0, rot, 0));
+        this.pos.set(x, v.radius * 1.4 + 0.85 + bob, z);
+        this.m4.compose(this.pos, this.quat, this.unitScale);
+        this.loadMesh.setMatrixAt(loadCount++, this.m4);
+      }
     }
 
     for (const [kind, mesh] of this.kindMeshes) {
@@ -666,6 +693,8 @@ export class GameView {
     }
     this.ringMesh.count = ringCount;
     this.ringMesh.instanceMatrix.needsUpdate = true;
+    this.loadMesh.count = loadCount;
+    this.loadMesh.instanceMatrix.needsUpdate = true;
 
     // Tower cranes slowly slew while the HQ is under construction.
     for (const bv of this.buildings.values()) {
