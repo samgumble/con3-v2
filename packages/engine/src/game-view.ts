@@ -7,6 +7,7 @@ import { RtsCamera } from "./rts-camera";
 import { buildUnitGeometries } from "./unit-models";
 import { buildBuildingMesh, buildDepositMesh, buildMegaprojectMesh } from "./building-models";
 import { buildSiteDecor } from "./site-decor";
+import { ParticleFX } from "./particles";
 
 /** Minimal render description of a unit (decoupled from the sim package). */
 export interface RenderUnit {
@@ -126,6 +127,13 @@ export class GameView {
   private flash = 0;
   private composer!: EffectComposer;
   private elapsed = 0; // animation clock
+  private dust!: ParticleFX;
+  private sparks!: ParticleFX;
+  private confetti!: ParticleFX;
+  private hqPos: THREE.Vector3 | null = null;
+  private hqActive = false;
+  private hqPhase = 0;
+  private ambientTimer = 0;
 
   private readonly raycaster = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -172,6 +180,14 @@ export class GameView {
       new UnrealBloomPass(new THREE.Vector2(w, h), 0.42, 0.55, 0.82),
     );
     this.composer.addPass(new OutputPass());
+
+    // Particle pools: dust (soft, light gravity), sparks (additive, heavy
+    // gravity, short life), confetti (additive, for victory).
+    const pr = this.renderer.getPixelRatio();
+    this.dust = new ParticleFX(900, THREE.NormalBlending, 1.2, pr);
+    this.sparks = new ParticleFX(500, THREE.AdditiveBlending, 11, pr);
+    this.confetti = new ParticleFX(500, THREE.AdditiveBlending, 5, pr);
+    this.scene.add(this.dust.points, this.sparks.points, this.confetti.points);
 
     window.addEventListener("resize", () => this.resize());
   }
@@ -445,6 +461,7 @@ export class GameView {
     for (const b of list) {
       seen.add(b.id);
       const isMega = b.megaPhase !== undefined;
+      if (isMega) this.hqPos = (this.hqPos ?? new THREE.Vector3()).set(b.x, 0, b.z);
       const stageKey = isMega
         ? `mega:${b.megaPhase}`
         : b.progress >= 1
@@ -452,7 +469,12 @@ export class GameView {
           : `${b.kind}:${Math.floor(b.progress * 3)}`;
       let v = this.buildings.get(b.id);
       if (!v || v.stageKey !== stageKey) {
-        if (v) this.scene.remove(v.group);
+        // A building completing or the HQ advancing a phase → dust/spark burst.
+        if (v) {
+          this.dust.burst(b.x, 1.2, b.z, isMega ? 34 : 16, 2.8, 2.4, 1.1, 0.9, 0.86, 0.78, 1.1);
+          if (isMega) this.sparks.burst(b.x, 2.5, b.z, 26, 4.5, 5, 0.28, 1.0, 0.82, 0.32, 0.7);
+          this.scene.remove(v.group);
+        }
         const group = isMega
           ? buildMegaprojectMesh(b.megaPhase!, b.radius)
           : buildBuildingMesh(b.kind, b.radius, b.progress);
@@ -484,6 +506,29 @@ export class GameView {
         this.scene.remove(v.group);
         this.buildings.delete(id);
       }
+    }
+  }
+
+  /** Tell the FX layer whether crews are working the HQ, and which phase. */
+  setHqWork(active: boolean, phase: number): void {
+    this.hqActive = active;
+    this.hqPhase = phase;
+  }
+
+  /** Celebratory confetti at the camera focus (victory). */
+  celebrate(): void {
+    const x = this.cameraCtl.focusX;
+    const z = this.cameraCtl.focusZ;
+    const cols = [
+      [1, 0.85, 0.1], [1, 0.45, 0.15], [0.4, 0.8, 1], [0.5, 1, 0.4], [1, 1, 1],
+    ];
+    for (let i = 0; i < 260; i++) {
+      const c = cols[i % cols.length];
+      this.confetti.spawn(
+        x + (Math.random() - 0.5) * 6, 1 + Math.random() * 2, z + (Math.random() - 0.5) * 6,
+        (Math.random() - 0.5) * 7, 7 + Math.random() * 8, (Math.random() - 0.5) * 7,
+        0.5 + Math.random() * 0.4, c[0], c[1], c[2], 1.8 + Math.random() * 1.4,
+      );
     }
   }
 
@@ -643,6 +688,9 @@ export class GameView {
     this.elapsed += dt;
     this.updateMarkers(dt);
     this.updateWeather(dt);
+    this.dust.update(dt);
+    this.sparks.update(dt);
+    this.confetti.update(dt);
 
     const counters = new Map<string, number>();
     for (const kind of this.kindMeshes.keys()) counters.set(kind, 0);
@@ -685,6 +733,15 @@ export class GameView {
         this.m4.compose(this.pos, this.quat, this.unitScale);
         this.loadMesh.setMatrixAt(loadCount++, this.m4);
       }
+
+      // Kick up dust under moving units.
+      if (moving && Math.random() < (v.kind === "worker" ? 0.16 : 0.3)) {
+        this.dust.spawn(
+          x + (Math.random() - 0.5) * 0.5, 0.1, z + (Math.random() - 0.5) * 0.5,
+          (Math.random() - 0.5) * 0.5, 0.5 + Math.random() * 0.5, (Math.random() - 0.5) * 0.5,
+          0.7 + Math.random() * 0.6, 0.86, 0.82, 0.74, 0.6 + Math.random() * 0.4,
+        );
+      }
     }
 
     for (const [kind, mesh] of this.kindMeshes) {
@@ -699,6 +756,37 @@ export class GameView {
     // Tower cranes slowly slew while the HQ is under construction.
     for (const bv of this.buildings.values()) {
       if (bv.crane) bv.crane.rotation.y = this.elapsed * 0.12;
+    }
+
+    // Construction dust + welding sparks at the HQ while crews are on it.
+    if (this.hqActive && this.hqPos) {
+      const p = this.hqPos;
+      for (let k = 0; k < 2; k++) {
+        this.dust.spawn(
+          p.x + (Math.random() - 0.5) * 5, 0.2 + Math.random() * 2.5, p.z + (Math.random() - 0.5) * 5,
+          (Math.random() - 0.5) * 0.6, 0.5 + Math.random() * 0.8, (Math.random() - 0.5) * 0.6,
+          1.0 + Math.random() * 0.9, 0.9, 0.87, 0.8, 1.1 + Math.random() * 0.7,
+        );
+      }
+      // Structural phases (5–9): showers of welding sparks up on the frame.
+      if (this.hqPhase >= 5 && this.hqPhase <= 9 && Math.random() < 0.7) {
+        this.sparks.burst(
+          p.x + (Math.random() - 0.5) * 4, 2 + Math.random() * 6, p.z + (Math.random() - 0.5) * 4,
+          9, 3.5, 5, 0.26, 1.0, 0.85, 0.35, 0.5,
+        );
+      }
+    }
+
+    // Drifting ambient site dust for atmosphere.
+    this.ambientTimer -= dt;
+    if (this.ambientTimer <= 0) {
+      this.ambientTimer = 0.14;
+      this.dust.spawn(
+        this.cameraCtl.focusX + (Math.random() - 0.5) * 42, 0.5 + Math.random() * 5,
+        this.cameraCtl.focusZ + (Math.random() - 0.5) * 42,
+        (Math.random() - 0.5) * 0.35, 0.06, (Math.random() - 0.5) * 0.35,
+        0.4 + Math.random() * 0.4, 0.82, 0.78, 0.7, 2 + Math.random() * 2,
+      );
     }
 
     this.composer.render();

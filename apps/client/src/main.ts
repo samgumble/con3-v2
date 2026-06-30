@@ -368,12 +368,14 @@ function updateHud(): void {
           ? `${mp.crews} crew on site`
           : "Right-click the HQ with workers to build";
     }
+    view.setHqWork(mp.crews > 0 && !mp.complete, mp.phaseIndex);
   }
 
   // Victory.
   if (sim.won && victory.classList.contains("hidden")) {
     victory.classList.remove("hidden");
     victoryStats.textContent = `Headquarters completed in ${Math.floor(sim.tick / 20)}s`;
+    view.celebrate();
   }
 
   const hz = sim.hazardStatus();
