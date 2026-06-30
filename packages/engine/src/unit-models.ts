@@ -12,11 +12,13 @@ import { mergeGeometries } from "three/examples/jsm/utils/BufferGeometryUtils.js
  * asset pipeline once .glb files are added).
  */
 
-const AMBER = 0xffb53b;
 const YELLOW = 0xffd84d;
-const ORANGE = 0xf2622a;
 const DARK = 0x33373b;
 const STEEL = 0x6f7984;
+const CAT = 0xf2b01e; // construction-equipment yellow
+const COVERALL = 0x2f3a52; // worker trousers
+const SKIN = 0xd9a066;
+const HIVIS = 0xff7a1a; // hi-vis vest
 
 /** Tag a geometry's vertices with a flat color so merged parts stay distinct. */
 function colored(geo: THREE.BufferGeometry, hex: number): THREE.BufferGeometry {
@@ -39,27 +41,33 @@ function box(w: number, h: number, d: number, hex: number): THREE.BufferGeometry
 function buildWorker(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
 
-  const body = colored(new THREE.CylinderGeometry(0.3, 0.42, 0.85, 10), AMBER);
-  body.translate(0, 0.45, 0);
-  parts.push(body);
+  // Trousers / legs.
+  const legs = colored(new THREE.CylinderGeometry(0.32, 0.36, 0.45, 9), COVERALL);
+  legs.translate(0, 0.23, 0);
+  parts.push(legs);
 
-  // Hi-vis vest band.
-  const vest = box(0.62, 0.22, 0.62, ORANGE);
-  vest.translate(0, 0.5, 0);
-  parts.push(vest);
+  // Hi-vis torso.
+  const torso = colored(new THREE.CylinderGeometry(0.3, 0.33, 0.46, 9), HIVIS);
+  torso.translate(0, 0.68, 0);
+  parts.push(torso);
+  // Reflective band.
+  const band = colored(new THREE.CylinderGeometry(0.32, 0.32, 0.08, 9), 0xf2f2f2);
+  band.translate(0, 0.66, 0);
+  parts.push(band);
 
-  // Hard hat (hemisphere).
+  // Head + hard hat.
+  const head = colored(new THREE.SphereGeometry(0.2, 9, 7), SKIN);
+  head.translate(0, 1.02, 0);
+  parts.push(head);
   const hat = colored(
-    new THREE.SphereGeometry(0.34, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+    new THREE.SphereGeometry(0.24, 10, 6, 0, Math.PI * 2, 0, Math.PI / 2),
     YELLOW,
   );
-  hat.translate(0, 0.88, 0);
+  hat.translate(0, 1.08, 0);
   parts.push(hat);
-
-  // Facing marker.
-  const face = box(0.14, 0.14, 0.28, DARK);
-  face.translate(0, 0.6, 0.4);
-  parts.push(face);
+  const brim = box(0.46, 0.05, 0.2, YELLOW);
+  brim.translate(0, 1.06, 0.16);
+  parts.push(brim);
 
   return merge(parts);
 }
@@ -67,68 +75,101 @@ function buildWorker(): THREE.BufferGeometry {
 function buildExcavator(): THREE.BufferGeometry {
   const parts: THREE.BufferGeometry[] = [];
 
-  const trackL = box(0.34, 0.32, 1.5, DARK);
-  trackL.translate(-0.55, 0.16, 0);
-  parts.push(trackL);
-  const trackR = box(0.34, 0.32, 1.5, DARK);
-  trackR.translate(0.55, 0.16, 0);
-  parts.push(trackR);
+  // Crawler tracks.
+  for (const sx of [-0.55, 0.55]) {
+    const track = box(0.36, 0.34, 1.6, DARK);
+    track.translate(sx, 0.17, 0);
+    parts.push(track);
+  }
+  const beltL = box(0.4, 0.1, 1.62, 0x1c1f22);
+  beltL.translate(-0.55, 0.34, 0);
+  parts.push(beltL);
+  const beltR = box(0.4, 0.1, 1.62, 0x1c1f22);
+  beltR.translate(0.55, 0.34, 0);
+  parts.push(beltR);
 
-  const base = box(0.95, 0.22, 0.95, STEEL);
-  base.translate(0, 0.43, -0.05);
+  // Slewing house + cab (CAT yellow).
+  const base = box(1.0, 0.26, 1.0, CAT);
+  base.translate(0, 0.47, -0.05);
   parts.push(base);
-
-  const cab = box(0.8, 0.55, 0.8, ORANGE);
-  cab.translate(0, 0.8, -0.18);
+  const house = box(0.95, 0.55, 0.85, CAT);
+  house.translate(0, 0.85, -0.25);
+  parts.push(house);
+  const cab = box(0.55, 0.5, 0.55, 0x2b3340);
+  cab.translate(0, 0.85, 0.35);
   parts.push(cab);
+  const counter = box(0.95, 0.4, 0.3, DARK);
+  counter.translate(0, 0.7, -0.7);
+  parts.push(counter);
 
-  // Boom + stick reaching forward.
-  const boom = box(0.18, 0.18, 1.0, YELLOW);
+  // Boom → stick → bucket reaching forward.
+  const boom = box(0.2, 0.2, 1.05, CAT);
   boom.rotateX(-0.95);
-  boom.translate(0, 0.85, 0.55);
+  boom.translate(0, 0.95, 0.6);
   parts.push(boom);
-
-  const stick = box(0.15, 0.15, 0.72, YELLOW);
-  stick.rotateX(0.5);
-  stick.translate(0, 0.52, 1.05);
+  const stick = box(0.16, 0.16, 0.8, CAT);
+  stick.rotateX(0.55);
+  stick.translate(0, 0.6, 1.15);
   parts.push(stick);
-
-  const bucket = box(0.3, 0.28, 0.3, DARK);
-  bucket.translate(0, 0.28, 1.3);
+  const bucket = colored(new THREE.CylinderGeometry(0.28, 0.18, 0.34, 6, 1, false, 0, Math.PI), DARK);
+  bucket.rotateZ(Math.PI / 2);
+  bucket.translate(0, 0.3, 1.4);
   parts.push(bucket);
 
   return merge(parts);
 }
 
 function buildCrane(): THREE.BufferGeometry {
+  // A mobile (truck-mounted) crane.
   const parts: THREE.BufferGeometry[] = [];
 
-  const base = box(1.1, 0.3, 1.1, STEEL);
-  base.translate(0, 0.15, 0);
-  parts.push(base);
-
-  const cab = box(0.7, 0.5, 0.7, YELLOW);
-  cab.translate(0, 0.55, -0.1);
+  // Carrier chassis + wheels.
+  const chassis = box(0.95, 0.32, 2.1, DARK);
+  chassis.translate(0, 0.4, 0);
+  parts.push(chassis);
+  for (const sx of [-0.55, 0.55]) {
+    for (const sz of [-0.7, 0, 0.7]) {
+      const wheel = colored(new THREE.CylinderGeometry(0.26, 0.26, 0.16, 8), 0x15171a);
+      wheel.rotateZ(Math.PI / 2);
+      wheel.translate(sx, 0.26, sz);
+      parts.push(wheel);
+    }
+  }
+  // Driver cab up front.
+  const cab = box(0.85, 0.5, 0.6, CAT);
+  cab.translate(0, 0.85, 0.78);
   parts.push(cab);
+  const windscreen = box(0.7, 0.32, 0.08, 0x2b3340);
+  windscreen.translate(0, 0.92, 1.08);
+  parts.push(windscreen);
 
-  // Lattice mast.
-  const mast = box(0.28, 2.3, 0.28, YELLOW);
-  mast.translate(0, 1.65, 0);
-  parts.push(mast);
-
-  // Jib reaching forward + counter-jib with weight.
-  const jib = box(0.18, 0.16, 2.6, YELLOW);
-  jib.translate(0, 2.78, 0.95);
-  parts.push(jib);
-
-  const counter = box(0.34, 0.34, 0.7, DARK);
-  counter.translate(0, 2.78, -0.7);
-  parts.push(counter);
-
-  // Hook line.
-  const line = box(0.05, 0.7, 0.05, DARK);
-  line.translate(0, 2.4, 1.9);
+  // Slewing deck + outriggers.
+  const deck = box(1.0, 0.34, 1.1, CAT);
+  deck.translate(0, 0.78, -0.35);
+  parts.push(deck);
+  for (const sx of [-0.62, 0.62]) {
+    for (const sz of [-0.75, 0.1] as const) {
+      const pad = box(0.18, 0.16, 0.18, STEEL);
+      pad.translate(sx, 0.1, sz);
+      parts.push(pad);
+    }
+  }
+  // Telescoping boom angled up over the rear.
+  const boom = box(0.26, 0.26, 2.5, CAT);
+  boom.rotateX(0.7);
+  boom.translate(0, 1.55, -0.5);
+  parts.push(boom);
+  const boom2 = box(0.18, 0.18, 1.4, STEEL);
+  boom2.rotateX(0.7);
+  boom2.translate(0, 2.35, 0.45);
+  parts.push(boom2);
+  // Hook block hanging from the boom tip.
+  const line = box(0.04, 0.7, 0.04, DARK);
+  line.translate(0, 2.5, 1.05);
   parts.push(line);
+  const hook = box(0.16, 0.2, 0.16, DARK);
+  hook.translate(0, 2.1, 1.05);
+  parts.push(hook);
 
   return merge(parts);
 }

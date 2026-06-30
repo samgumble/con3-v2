@@ -226,21 +226,40 @@ export function buildMegaprojectMesh(phase: number, radius: number): THREE.Group
   return g;
 }
 
-/** A material deposit mound, scaled by how much remains. */
+/** A material stockpile (aggregate pile in a timber bay), scaled by remaining. */
 export function buildDepositMesh(radius: number): THREE.Group {
   const g = new THREE.Group();
-  const mound = new THREE.Mesh(
-    new THREE.ConeGeometry(radius, radius * 1.1, 7),
-    mat(0xb9a06a, 1),
-  );
-  mound.position.y = radius * 0.55;
+
+  // Timber retaining boards forming an L-shaped bay.
+  const boardMat = mat(0x8a5a2b);
+  const bw = radius * 2.1;
+  for (let i = 0; i < 2; i++) {
+    const back = new THREE.Mesh(new THREE.BoxGeometry(bw, 0.5, 0.14), boardMat);
+    back.position.set(0, 0.25 + i * 0.5, -radius * 0.95);
+    back.castShadow = true;
+    back.receiveShadow = true;
+    g.add(back);
+    const side = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.5, bw), boardMat);
+    side.position.set(-radius * 0.95, 0.25 + i * 0.5, 0);
+    side.castShadow = true;
+    g.add(side);
+  }
+
+  // Aggregate mound (gravel/sand).
+  const mound = new THREE.Mesh(new THREE.ConeGeometry(radius * 0.95, radius * 1.05, 7), mat(0xc2a878, 1));
+  mound.position.set(radius * 0.1, radius * 0.5, radius * 0.1);
   mound.castShadow = true;
   mound.receiveShadow = true;
   g.add(mound);
-  // A couple of darker chunks for texture.
-  const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(radius * 0.4, 0), mat(0x8d8377, 1));
-  rock.position.set(radius * 0.4, radius * 0.3, -radius * 0.3);
-  rock.castShadow = true;
-  g.add(rock);
+
+  // Darker aggregate chunks for texture.
+  for (let i = 0; i < 3; i++) {
+    const chunk = new THREE.Mesh(new THREE.IcosahedronGeometry(radius * 0.28, 0), mat(0x8d8377, 1));
+    const a = (i / 3) * Math.PI * 2;
+    chunk.position.set(Math.cos(a) * radius * 0.55, radius * 0.28, Math.sin(a) * radius * 0.55);
+    chunk.rotation.set(i, i * 2, i);
+    chunk.castShadow = true;
+    g.add(chunk);
+  }
   return g;
 }
