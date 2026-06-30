@@ -130,6 +130,28 @@ function disposeGroup(obj: THREE.Object3D): void {
  * tint (multiplied over the vertex colours via instanceColor) + a small size
  * factor — so a crowd of the same kind doesn't look like identical clones.
  */
+/** Cheap value noise (smooth) for terrain tinting + undulation — render only. */
+function thash(x: number, z: number): number {
+  const h = Math.sin(x * 127.1 + z * 311.7) * 43758.5453;
+  return h - Math.floor(h);
+}
+function vnoise(x: number, z: number): number {
+  const xi = Math.floor(x);
+  const zi = Math.floor(z);
+  const xf = x - xi;
+  const zf = z - zi;
+  const u = xf * xf * (3 - 2 * xf);
+  const v = zf * zf * (3 - 2 * zf);
+  const a = thash(xi, zi);
+  const b = thash(xi + 1, zi);
+  const c = thash(xi, zi + 1);
+  const d = thash(xi + 1, zi + 1);
+  return a + (b - a) * u + (c - a) * v + (a - b - c + d) * u * v;
+}
+function fbm(x: number, z: number): number {
+  return vnoise(x, z) * 0.6 + vnoise(x * 2.3 + 5, z * 2.3 - 3) * 0.28 + vnoise(x * 5.1 - 2, z * 5.1 + 4) * 0.12;
+}
+
 function unitVariation(id: number): { tint: THREE.Color; scale: number } {
   let h = (id * 2654435761) >>> 0;
   const a = (h & 0xff) / 255;
@@ -399,37 +421,132 @@ export class GameView {
   }
 
   private buildGround(): void {
-    // Dusty graded-dirt lot.
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x83745d, roughness: 1 });
-    const ground = new THREE.Mesh(new THREE.PlaneGeometry(150, 150), groundMat);
-    ground.rotation.x = -Math.PI / 2;
+    const rand = mulberry32(0x3c0ffee);
+
+    // 1. Subdivided dirt surface: vertex-coloured tonal noise (so it isn't a
+    //    flat slab) + gentle berms beyond the play area for a sense of a graded
+    //    lot. The central ±60 stays flat so units never float over dips.
+    const SIZE = 168;
+    const SEG = 84;
+    const geo = new THREE.PlaneGeometry(SIZE, SIZE, SEG, SEG);
+    geo.rotateX(-Math.PI / 2);
+    const pos = geo.attributes.position as THREE.BufferAttribute;
+    const col = new Float32Array(pos.count * 3);
+    const light = new THREE.Color(0x91815f);
+    const mid = new THREE.Color(0x73634b);
+    const dark = new THREE.Color(0x5b4f3c);
+    const tmp = new THREE.Color();
+    for (let i = 0; i < pos.count; i++) {
+      const x = pos.getX(i);
+      const z = pos.getZ(i);
+      const n = fbm(x * 0.05, z * 0.05);
+      if (n < 0.5) tmp.copy(dark).lerp(mid, n * 2);
+      else tmp.copy(mid).lerp(light, (n - 0.5) * 2);
+      col[i * 3] = tmp.r;
+      col[i * 3 + 1] = tmp.g;
+      col[i * 3 + 2] = tmp.b;
+      const edge = Math.max(Math.abs(x), Math.abs(z));
+      if (edge > 60) pos.setY(i, (edge - 60) * 0.14 + fbm(x * 0.07, z * 0.07) * 1.1);
+    }
+    geo.setAttribute("color", new THREE.BufferAttribute(col, 3));
+    pos.needsUpdate = true;
+    geo.computeVertexNormals();
+    const ground = new THREE.Mesh(geo, new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 }));
     ground.receiveShadow = true;
     this.scene.add(ground);
 
-    // Scattered darker patches (mud / churned earth / tracks).
-    const rand = mulberry32(0x3c0ffee);
-    const patchMat = new THREE.MeshStandardMaterial({ color: 0x6b5d49, roughness: 1 });
-    const trackMat = new THREE.MeshStandardMaterial({ color: 0x5d513f, roughness: 1 });
-    for (let i = 0; i < 22; i++) {
-      const r = 2 + rand() * 5;
-      const patch = new THREE.Mesh(new THREE.CircleGeometry(r, 7), patchMat);
-      patch.rotation.x = -Math.PI / 2;
-      patch.position.set((rand() - 0.5) * 110, 0.012, (rand() - 0.5) * 110);
-      patch.receiveShadow = true;
-      this.scene.add(patch);
+    // 2. Flat decals: subtle mud/gravel mottling, a few puddles, tyre ruts.
+    const patchCols = [0x6b5d49, 0x77684f, 0x5f5240, 0x807257, 0x665845];
+    for (let i = 0; i < 52; i++) {
+      const m = new THREE.Mesh(
+        new THREE.CircleGeometry(1 + rand() * 3, 9),
+        new THREE.MeshStandardMaterial({ color: patchCols[Math.floor(rand() * patchCols.length)], roughness: 1 }),
+      );
+      m.rotation.x = -Math.PI / 2;
+      m.rotation.z = rand() * Math.PI;
+      m.position.set((rand() - 0.5) * 124, 0.012, (rand() - 0.5) * 124);
+      m.receiveShadow = true;
+      this.scene.add(m);
     }
-    // A couple of tyre-track strips.
     for (let i = 0; i < 4; i++) {
-      const strip = new THREE.Mesh(new THREE.PlaneGeometry(0.5, 30 + rand() * 20), trackMat);
+      const puddle = new THREE.Mesh(
+        new THREE.CircleGeometry(0.6 + rand() * 1.2, 12),
+        new THREE.MeshStandardMaterial({ color: 0x4a4538, roughness: 0.4, metalness: 0.15 }),
+      );
+      puddle.rotation.x = -Math.PI / 2;
+      puddle.position.set((rand() - 0.5) * 80, 0.013, (rand() - 0.5) * 80);
+      this.scene.add(puddle);
+    }
+    const trackMat = new THREE.MeshStandardMaterial({ color: 0x534636, roughness: 1 });
+    for (let i = 0; i < 8; i++) {
+      const strip = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 18 + rand() * 24), trackMat);
       strip.rotation.x = -Math.PI / 2;
       strip.rotation.z = rand() * Math.PI;
-      strip.position.set((rand() - 0.5) * 80, 0.014, (rand() - 0.5) * 60);
+      strip.position.set((rand() - 0.5) * 100, 0.014, (rand() - 0.5) * 80);
       this.scene.add(strip);
     }
 
-    // Faint survey grid.
+    // 3. Scattered pebbles + 4. sparse perimeter weeds (one InstancedMesh each).
+    const m4 = new THREE.Matrix4();
+    const q = new THREE.Quaternion();
+    const e = new THREE.Euler();
+    const sv = new THREE.Vector3();
+    const pv = new THREE.Vector3();
+    const cv = new THREE.Color();
+
+    const pebbles = new THREE.InstancedMesh(
+      new THREE.IcosahedronGeometry(0.18, 0),
+      new THREE.MeshStandardMaterial({ color: 0x7a6d57, roughness: 1, flatShading: true }),
+      170,
+    );
+    for (let i = 0; i < 170; i++) {
+      const sc = 0.4 + rand() * 1.4;
+      pv.set((rand() - 0.5) * 132, 0.04 * sc, (rand() - 0.5) * 132);
+      e.set(rand() * 3, rand() * 3, rand() * 3);
+      q.setFromEuler(e);
+      sv.set(sc, sc * 0.7, sc);
+      m4.compose(pv, q, sv);
+      pebbles.setMatrixAt(i, m4);
+      const t = 0.8 + rand() * 0.4;
+      pebbles.setColorAt(i, cv.setRGB(t, t * 0.97, t * 0.92));
+    }
+    pebbles.instanceMatrix.needsUpdate = true;
+    if (pebbles.instanceColor) pebbles.instanceColor.needsUpdate = true;
+    pebbles.castShadow = true;
+    pebbles.receiveShadow = true;
+    this.scene.add(pebbles);
+
+    const weeds = new THREE.InstancedMesh(
+      new THREE.ConeGeometry(0.08, 0.55, 4),
+      new THREE.MeshStandardMaterial({ color: 0x5f6e36, roughness: 1, flatShading: true }),
+      140,
+    );
+    let wc = 0;
+    for (let i = 0; i < 600 && wc < 140; i++) {
+      const x = (rand() - 0.5) * 150;
+      const z = (rand() - 0.5) * 150;
+      const edge = Math.max(Math.abs(x), Math.abs(z));
+      if (edge < 46 && rand() > 0.12) continue; // mostly weeds at the churned-free perimeter
+      const sc = 0.7 + rand() * 0.9;
+      pv.set(x, 0.27 * sc, z);
+      e.set((rand() - 0.5) * 0.3, rand() * Math.PI, (rand() - 0.5) * 0.3);
+      q.setFromEuler(e);
+      sv.set(sc, sc, sc);
+      m4.compose(pv, q, sv);
+      weeds.setMatrixAt(wc, m4);
+      const g = 0.78 + rand() * 0.35;
+      weeds.setColorAt(wc, cv.setRGB(g * 0.95, g, g * 0.7));
+      wc++;
+    }
+    weeds.count = wc;
+    weeds.instanceMatrix.needsUpdate = true;
+    if (weeds.instanceColor) weeds.instanceColor.needsUpdate = true;
+    weeds.castShadow = true;
+    this.scene.add(weeds);
+
+    // 5. Faint setting-out grid.
     const grid = new THREE.GridHelper(150, 75, 0x6f7d88, 0x5a6670);
-    (grid.material as THREE.Material).opacity = 0.18;
+    (grid.material as THREE.Material).opacity = 0.1;
     (grid.material as THREE.Material).transparent = true;
     grid.position.y = 0.02;
     this.scene.add(grid);

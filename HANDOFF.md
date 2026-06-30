@@ -295,6 +295,14 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- Terrain detail pass (game-view.ts `buildGround`). The flat dirt slab is now a
+  subdivided (84×84) vertex-coloured surface tinted by cheap value noise
+  (`fbm`/`vnoise`/`thash`) so it reads as graded dirt, with gentle perimeter
+  berms (height ramps in only beyond ±60 — the play area stays flat at y=0 so
+  units never float; verified max berm 4.3, centre flat). Plus subtle mud/gravel
+  mottling patches, a few puddles, tyre ruts, scattered pebbles (InstancedMesh,
+  colour-varied) and sparse perimeter weeds (InstancedMesh), and a fainter
+  setting-out grid.
 - More model polish: per-unit crowd variety + field office + site decor. (1)
   **Per-unit variation** (game-view.ts): each unit gets a stable tint (via
   `instanceColor`, multiplied over the vertex colours) + a small size factor from
