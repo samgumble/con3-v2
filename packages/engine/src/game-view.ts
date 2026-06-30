@@ -92,6 +92,9 @@ interface UnitVisual {
   selected: boolean;
   carrying: number;
   task: string;
+  /** Stable per-unit visual variation so a crowd isn't identical clones. */
+  tint: THREE.Color;
+  scaleVar: number;
   seen: boolean;
 }
 
@@ -120,6 +123,27 @@ function disposeGroup(obj: THREE.Object3D): void {
     if (Array.isArray(mat)) for (const m of mat) m.dispose();
     else if (mat) (mat as THREE.Material).dispose();
   });
+}
+
+/**
+ * Stable per-unit visual variation derived from the entity id — a subtle colour
+ * tint (multiplied over the vertex colours via instanceColor) + a small size
+ * factor — so a crowd of the same kind doesn't look like identical clones.
+ */
+function unitVariation(id: number): { tint: THREE.Color; scale: number } {
+  let h = (id * 2654435761) >>> 0;
+  const a = (h & 0xff) / 255;
+  h >>>= 8;
+  const b = (h & 0xff) / 255;
+  h >>>= 8;
+  const c = (h & 0xff) / 255;
+  const bright = 0.84 + a * 0.22; // 0.84..1.06
+  const warm = (b - 0.5) * 0.12; // ±0.06 warm/cool shift
+  const cl = (v: number): number => (v < 0 ? 0 : v > 1 ? 1 : v);
+  return {
+    tint: new THREE.Color(cl(bright * (1 + warm)), cl(bright), cl(bright * (1 - warm))),
+    scale: 0.92 + c * 0.15, // 0.92..1.07
+  };
 }
 
 /**
@@ -219,23 +243,35 @@ export class GameView {
     this.smoke = new ParticleFX(700, THREE.NormalBlending, -0.35, pr); // negative gravity = rises
     this.scene.add(this.dust.points, this.sparks.points, this.confetti.points, this.smoke.points);
 
-    // Site generators that puff a smoke column (with a little box mesh each).
+    // Site diesel generators (also colliders) that puff an exhaust column.
     for (const s of [{ x: -19, z: 19 }, { x: 22, z: 8 }]) {
       this.smokeSources.push(s);
-      const gen = new THREE.Mesh(
-        new THREE.BoxGeometry(1.0, 0.8, 1.4),
-        new THREE.MeshStandardMaterial({ color: 0xe0a020, roughness: 0.8, flatShading: true }),
-      );
-      gen.position.set(s.x, 0.4, s.z);
-      gen.castShadow = true;
-      gen.receiveShadow = true;
-      this.scene.add(gen);
-      const pipe = new THREE.Mesh(
-        new THREE.CylinderGeometry(0.1, 0.1, 0.7, 8),
-        new THREE.MeshStandardMaterial({ color: 0x2a2d31, flatShading: true }),
-      );
-      pipe.position.set(s.x + 0.3, 1.05, s.z - 0.4);
-      this.scene.add(pipe);
+      const grp = new THREE.Group();
+      grp.position.set(s.x, 0, s.z);
+      const gm = (c: number, rough = 0.8) =>
+        new THREE.MeshStandardMaterial({ color: c, roughness: rough, flatShading: true });
+      const part = (w: number, h: number, d: number, c: number, x: number, y: number, z: number): void => {
+        const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), gm(c));
+        m.position.set(x, y, z);
+        m.castShadow = true;
+        m.receiveShadow = true;
+        grp.add(m);
+      };
+      part(1.24, 0.16, 1.54, 0x2a2d31, 0, 0.08, 0); // skid
+      part(1.0, 0.72, 1.4, 0xe0a020, 0, 0.52, 0); // yellow canopy
+      part(1.06, 0.12, 1.46, 0x33373b, 0, 0.9, 0); // roof cap
+      part(0.5, 0.46, 0.06, 0x1c1f22, 0, 0.52, 0.71); // control panel
+      part(0.3, 0.2, 0.05, 0x4a90d9, 0, 0.58, 0.74); // gauge cluster
+      part(0.06, 0.5, 1.0, 0x1c1f22, -0.52, 0.52, 0); // radiator grille
+      for (let i = 0; i < 4; i++) part(0.08, 0.03, 1.0, 0x565b61, -0.54, 0.34 + i * 0.13, 0); // louvres
+      const pipe = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 0.85, 8), gm(0x2a2d31));
+      pipe.position.set(0.3, 1.25, -0.4); // exhaust stack (smoke rises from here)
+      pipe.castShadow = true;
+      grp.add(pipe);
+      const cap = new THREE.Mesh(new THREE.CylinderGeometry(0.15, 0.1, 0.1, 8), gm(0x1c1f22));
+      cap.position.set(0.3, 1.72, -0.4);
+      grp.add(cap);
+      this.scene.add(grp);
     }
 
     window.addEventListener("resize", () => this.resize());
@@ -409,6 +445,8 @@ export class GameView {
         metalness: 0.05,
       });
       const mesh = new THREE.InstancedMesh(geo, mat, UNIT_CAP);
+      // Per-instance colour (multiplied over the vertex colours) for crowd variety.
+      mesh.instanceColor = new THREE.InstancedBufferAttribute(new Float32Array(UNIT_CAP * 3).fill(1), 3);
       mesh.count = 0;
       mesh.castShadow = true;
       mesh.receiveShadow = true;
@@ -701,6 +739,7 @@ export class GameView {
     for (const u of units) {
       let v = this.visuals.get(u.id);
       if (!v) {
+        const vary = unitVariation(u.id);
         v = {
           kind: u.kind,
           radius: u.radius,
@@ -713,6 +752,8 @@ export class GameView {
           selected: u.selected,
           carrying: u.carrying ?? 0,
           task: u.task ?? "idle",
+          tint: vary.tint,
+          scaleVar: vary.scale,
           seen: true,
         };
         this.visuals.set(u.id, v);
@@ -796,10 +837,13 @@ export class GameView {
       const mesh = this.kindMeshes.get(v.kind);
       if (mesh) {
         const idx = counters.get(v.kind)!;
+        const sv = v.kind === "worker" ? v.scaleVar : 1; // people vary in size; machines don't
+        this.unitScale.set(sv, sv, sv);
         this.quat.setFromEuler(this.euler.set(leanX, rot, 0));
         this.pos.set(x, bob, z);
         this.m4.compose(this.pos, this.quat, this.unitScale);
         mesh.setMatrixAt(idx, this.m4);
+        mesh.setColorAt(idx, v.tint);
         counters.set(v.kind, idx + 1);
       }
 
@@ -849,6 +893,7 @@ export class GameView {
     for (const [kind, mesh] of this.kindMeshes) {
       mesh.count = counters.get(kind)!;
       mesh.instanceMatrix.needsUpdate = true;
+      if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
     }
     this.ringMesh.count = ringCount;
     this.ringMesh.instanceMatrix.needsUpdate = true;

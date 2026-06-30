@@ -114,14 +114,32 @@ function buildFinished(kind: string, r: number, stockFrac = 0): THREE.Group {
       break;
     }
     case "fieldOffice": {
-      // Wide site trailer with blue trim, a porch, and a sign board.
-      g.add(box(r * 2.1, 1.0, r * 1.2, WHITE, 0, 0.65, 0));
-      g.add(box(r * 2.15, 0.16, r * 1.25, BLUE, 0, 1.2, 0)); // roof trim
-      g.add(box(r * 2.12, 0.22, r * 1.22, BLUE, 0, 0.5, 0)); // side stripe
-      g.add(box(r * 1.9, 0.25, r * 1.0, DARK, 0, 0.2, 0)); // chassis
-      g.add(box(0.7, 0.9, 0.12, DARK, r * 0.5, 0.6, r * 0.61)); // door
-      g.add(box(0.12, 1.3, 0.12, DARK, -r * 0.9, 0.65, r * 0.8)); // sign post
-      g.add(box(1.1, 0.55, 0.08, YELLOW, -r * 0.9, 1.25, r * 0.85)); // sign board
+      // Wide modular site office (trailer): blue trim, glazed windows, a porch +
+      // entrance sign, rooftop AC + vent, sat on jack stands.
+      g.add(box(r * 2.12, 0.22, r * 1.08, DARK, 0, 0.24, 0)); // chassis skid
+      for (const sx of [-r * 0.85, r * 0.85]) for (const sz of [-r * 0.42, r * 0.42]) {
+        g.add(box(0.12, 0.32, 0.12, STEEL, sx, 0.14, sz)); // jack stands
+      }
+      g.add(box(r * 2.1, 0.95, r * 1.2, WHITE, 0, 0.8, 0)); // cabin
+      g.add(box(r * 2.16, 0.16, r * 1.26, BLUE, 0, 1.3, 0)); // roof eave trim
+      g.add(box(r * 2.13, 0.2, r * 1.23, BLUE, 0, 0.55, 0)); // skirt stripe
+      g.add(box(r * 2.06, 0.06, r * 1.16, 0xd8dde2, 0, 1.34, 0)); // roof panel
+      // Windows along the front (+Z), framed.
+      for (const wx of [-r * 0.6, 0]) {
+        g.add(box(0.56, 0.44, 0.06, 0x2a2d31, wx, 0.86, r * 0.61));
+        g.add(box(0.48, 0.36, 0.07, GLASS, wx, 0.86, r * 0.62));
+      }
+      // Door + porch steps (right end).
+      g.add(box(0.66, 0.84, 0.1, DARK, r * 0.72, 0.69, r * 0.61));
+      for (let s = 0; s < 2; s++) g.add(box(0.7, 0.1, 0.28, STEEL, r * 0.72, 0.2 + s * 0.16, r * 0.74 + s * 0.1));
+      // Rooftop AC unit + vent flue.
+      g.add(box(0.5, 0.3, 0.5, STEEL, -r * 0.6, 1.52, 0));
+      g.add(box(0.46, 0.06, 0.46, DARK, -r * 0.6, 1.69, 0));
+      g.add(cyl(0.06, 0.06, 0.4, DARK, r * 0.7, 1.55, -r * 0.3, 6));
+      // Entrance sign post + board + hi-vis cap.
+      g.add(box(0.12, 1.5, 0.12, DARK, -r * 0.98, 0.75, r * 0.88));
+      g.add(box(1.1, 0.55, 0.08, YELLOW, -r * 0.98, 1.4, r * 0.92));
+      g.add(box(1.14, 0.12, 0.1, DARK, -r * 0.98, 1.72, r * 0.92));
       break;
     }
     case "permitOffice": {

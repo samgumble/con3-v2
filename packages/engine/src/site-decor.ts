@@ -13,6 +13,9 @@ const DARK = 0x2a2d31;
 const WHITE = 0xe6e6e6;
 const RUST = 0xa65f38;
 const WOOD = 0xb07a43;
+const YELLOW = 0xf5b51a;
+const BLUE = 0x3f7bd6;
+const LAMP = 0xfff1c0;
 
 function mat(color: number, rough = 0.92): THREE.MeshStandardMaterial {
   return new THREE.MeshStandardMaterial({ color, roughness: rough, flatShading: true });
@@ -20,6 +23,13 @@ function mat(color: number, rough = 0.92): THREE.MeshStandardMaterial {
 
 function box(w: number, h: number, d: number, color: number): THREE.Mesh {
   const m = new THREE.Mesh(new THREE.BoxGeometry(w, h, d), mat(color));
+  m.castShadow = true;
+  m.receiveShadow = true;
+  return m;
+}
+
+function cyl(rt: number, rb: number, h: number, color: number, seg = 10): THREE.Mesh {
+  const m = new THREE.Mesh(new THREE.CylinderGeometry(rt, rb, h, seg), mat(color));
   m.castShadow = true;
   m.receiveShadow = true;
   return m;
@@ -130,23 +140,41 @@ function skip(): THREE.Group {
   end.position.set(1.4, 0.7, 0);
   end.rotation.z = 0.3;
   g.add(end);
+  const stripe = box(2.64, 0.18, 1.42, YELLOW); // hi-vis hazard band
+  stripe.position.y = 0.85;
+  g.add(stripe);
   const rubble = box(2.2, 0.4, 1.1, 0x6b5d4f);
   rubble.position.y = 1.05;
   g.add(rubble);
+  for (const sx of [-1.0, 1.0]) {
+    const lug = box(0.1, 0.22, 0.18, DARK); // lifting lugs
+    lug.position.set(sx, 0.98, 0.62);
+    g.add(lug);
+  }
   return g;
 }
 
-/** A row of portable toilets. */
+/** A row of portable toilets (doors, vents and handles). */
 function portaloos(): THREE.Group {
   const g = new THREE.Group();
   const cols = [0x3f7bd6, 0x4caf6a, 0x3f7bd6];
   for (let i = 0; i < 3; i++) {
+    const x = i * 0.9;
     const u = box(0.8, 1.6, 0.8, cols[i]);
-    u.position.set(i * 0.9, 0.8, 0);
+    u.position.set(x, 0.8, 0);
     g.add(u);
-    const roof = box(0.86, 0.1, 0.86, WHITE);
-    roof.position.set(i * 0.9, 1.62, 0);
+    const roof = box(0.88, 0.12, 0.88, WHITE);
+    roof.position.set(x, 1.63, 0);
     g.add(roof);
+    const door = box(0.56, 1.2, 0.04, 0xf4f4f4);
+    door.position.set(x, 0.72, 0.41);
+    g.add(door);
+    const vent = box(0.5, 0.12, 0.04, DARK); // top vent slats
+    vent.position.set(x, 1.34, 0.41);
+    g.add(vent);
+    const handle = box(0.05, 0.18, 0.05, DARK);
+    handle.position.set(x + 0.2, 0.78, 0.43);
+    g.add(handle);
   }
   return g;
 }
@@ -163,9 +191,117 @@ function siteSign(): THREE.Group {
   const board = box(3.0, 1.4, 0.1, WHITE);
   board.position.set(0, 1.9, 0);
   g.add(board);
-  const band = box(3.0, 0.35, 0.12, ORANGE);
+  const band = box(3.0, 0.35, 0.12, ORANGE); // header
   band.position.set(0, 2.45, 0);
   g.add(band);
+  const footer = box(3.0, 0.24, 0.12, BLUE); // info strip
+  footer.position.set(0, 1.33, 0);
+  g.add(footer);
+  const logo = box(0.7, 0.55, 0.13, YELLOW); // logo panel
+  logo.position.set(-1.0, 1.9, 0);
+  g.add(logo);
+  for (let i = 0; i < 3; i++) {
+    const line = box(1.4, 0.08, 0.13, 0xb7bdc4); // mock text lines
+    line.position.set(0.4, 2.08 - i * 0.24, 0);
+    g.add(line);
+  }
+  return g;
+}
+
+/** A trailer-mounted floodlight tower with a generator base + lamp heads. */
+function floodlightTower(): THREE.Group {
+  const g = new THREE.Group();
+  const skid = box(1.2, 0.14, 0.9, DARK);
+  skid.position.y = 0.07;
+  g.add(skid);
+  const genny = box(1.0, 0.5, 0.7, YELLOW);
+  genny.position.y = 0.32;
+  g.add(genny);
+  const mast = cyl(0.07, 0.09, 3.4, STEEL, 8);
+  mast.position.set(0, 2.2, -0.1);
+  g.add(mast);
+  const crossbar = box(1.7, 0.08, 0.08, DARK);
+  crossbar.position.set(0, 3.85, -0.05);
+  g.add(crossbar);
+  for (const lx of [-0.6, -0.2, 0.2, 0.6]) {
+    const lamp = box(0.3, 0.24, 0.14, DARK);
+    lamp.position.set(lx, 3.95, 0.02);
+    g.add(lamp);
+    const glass = box(0.24, 0.17, 0.05, LAMP);
+    glass.position.set(lx, 3.95, 0.1);
+    g.add(glass);
+  }
+  return g;
+}
+
+/** A small wheeled cement mixer with a tilted drum. */
+function cementMixer(): THREE.Group {
+  const g = new THREE.Group();
+  const frame = box(1.0, 0.16, 0.7, YELLOW);
+  frame.position.y = 0.5;
+  g.add(frame);
+  for (const sx of [-0.5, 0.5]) {
+    const w = cyl(0.26, 0.26, 0.12, DARK, 10);
+    w.rotation.z = Math.PI / 2;
+    w.position.set(sx, 0.26, 0.25);
+    g.add(w);
+  }
+  const leg = box(0.1, 0.5, 0.1, STEEL);
+  leg.position.set(0, 0.25, -0.32);
+  g.add(leg);
+  const drum = cyl(0.46, 0.3, 0.72, ORANGE, 12);
+  drum.rotation.x = -0.5;
+  drum.position.set(0, 0.96, -0.05);
+  g.add(drum);
+  const mouth = cyl(0.3, 0.34, 0.18, DARK, 12);
+  mouth.rotation.x = -0.5;
+  mouth.position.set(0, 1.26, 0.3);
+  g.add(mouth);
+  const motor = box(0.3, 0.3, 0.3, DARK);
+  motor.position.set(0.52, 0.86, -0.05);
+  g.add(motor);
+  return g;
+}
+
+/** A cluster of oil/fuel drums. */
+function drumCluster(rand: () => number): THREE.Group {
+  const g = new THREE.Group();
+  const cols = [BLUE, RUST, 0x2f8a4a, DARK];
+  const pos: [number, number][] = [
+    [0, 0],
+    [0.62, 0.1],
+    [0.3, 0.56],
+    [-0.3, 0.42],
+  ];
+  for (const [px, pz] of pos) {
+    const d = cyl(0.28, 0.28, 0.78, cols[Math.floor(rand() * cols.length)], 12);
+    d.position.set(px, 0.39, pz);
+    g.add(d);
+    const ring = cyl(0.29, 0.29, 0.06, DARK, 12);
+    ring.position.set(px, 0.62, pz);
+    g.add(ring);
+  }
+  return g;
+}
+
+/** A bundle of reinforcing bar resting on timber dunnage. */
+function rebarBundle(): THREE.Group {
+  const g = new THREE.Group();
+  for (const dz of [-0.7, 0.7]) {
+    const sleeper = box(0.5, 0.16, 0.2, WOOD);
+    sleeper.position.set(0, 0.08, dz);
+    g.add(sleeper);
+  }
+  for (let i = 0; i < 7; i++) {
+    const bar = cyl(0.04, 0.04, 2.4, 0x9a7b52, 6);
+    bar.rotation.x = Math.PI / 2;
+    const a = (i / 7) * Math.PI * 2;
+    bar.position.set(Math.cos(a) * 0.13, 0.3 + Math.sin(a) * 0.13, 0);
+    g.add(bar);
+  }
+  const strap = box(0.34, 0.34, 0.04, DARK);
+  strap.position.set(0, 0.3, 0.6);
+  g.add(strap);
   return g;
 }
 
@@ -245,6 +381,14 @@ export function buildSiteDecor(half: number): THREE.Group {
   add(jerseyBarrier(), -6, 36, 0);
   add(jerseyBarrier(), 6, 36, 0);
   add(jerseyBarrier(), 8, 36, 0);
+
+  // Plant + materials scattered around the yard.
+  add(floodlightTower(), 40, -32, 0.5);
+  add(floodlightTower(), -12, 40, -0.3);
+  add(cementMixer(), -30, 33, 0.6);
+  add(drumCluster(rand), 37, 25, 0);
+  add(drumCluster(rand), -40, -28, 0.4);
+  add(rebarBundle(), 25, 33, 0.2);
 
   // Traffic cones lining a route from the gate toward the build site.
   for (let i = 0; i < 8; i++) {

@@ -295,6 +295,17 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- More model polish: per-unit crowd variety + field office + site decor. (1)
+  **Per-unit variation** (game-view.ts): each unit gets a stable tint (via
+  `instanceColor`, multiplied over the vertex colours) + a small size factor from
+  `unitVariation(id)`, so a crowd of the same kind isn't identical clones (size
+  varies for workers only; tint for all). (2) **Field office** rebuilt — blue roof
+  + eave, rooftop AC + vent, framed glazed windows, a door with porch steps, jack
+  stands and the entrance sign. (3) **Site decor** (site-decor.ts) — new props
+  (floodlight tower, cement mixer, oil-drum clusters, rebar bundle) + polished
+  skip (hazard stripe + lugs), portaloos (doors/vents/handles) and site sign
+  (logo/info strip); the two diesel generators got a proper canopy + radiator
+  grille + exhaust stack. All verified in-browser.
 - Unit model polish (unit-models.ts). Workers gained arms + skin hands, split
   legs + boots, a tool belt, hi-vis reflective braces (the white ‖ on the vest)
   and a proper hard hat with a crest. Excavators gained a glazed cab, hydraulic
