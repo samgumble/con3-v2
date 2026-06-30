@@ -194,7 +194,7 @@ export class GameView {
   private ambient!: THREE.AmbientLight;
   private rain: THREE.LineSegments | null = null;
   private weather: "clear" | "rain" | "osha" | "shortage" | "strike" = "clear";
-  private readonly weatherSky = new THREE.Color(0xaab7c2);
+  private readonly weatherSky = new THREE.Color(0xc6b694);
   private lightningTimer = 4;
   private flash = 0;
   private composer!: EffectComposer;
@@ -236,9 +236,9 @@ export class GameView {
 
     this.cameraCtl = new RtsCamera(w / h, this.renderer.domElement);
 
-    // Bright, slightly hazy daytime sky so hi-vis colours pop.
-    this.scene.background = new THREE.Color(0xaab7c2);
-    this.scene.fog = new THREE.Fog(0xaab7c2, 95, 215);
+    // Warm, hazy late-afternoon sky + atmospheric distance fog for depth.
+    this.scene.background = new THREE.Color(0xc6b694);
+    this.scene.fog = new THREE.Fog(0xc6b694, 46, 152);
 
     this.buildLighting();
     this.buildGround();
@@ -300,22 +300,24 @@ export class GameView {
   }
 
   private buildLighting(): void {
-    this.hemi = new THREE.HemisphereLight(0xdfeaf5, 0x7a6b54, 0.9);
+    // Warm sky bounce + cool shadow fill, low ambient — golden-hour mood.
+    this.hemi = new THREE.HemisphereLight(0xeadfc6, 0x8a7456, 0.72);
     this.scene.add(this.hemi);
-    this.ambient = new THREE.AmbientLight(0xffffff, 0.12);
+    this.ambient = new THREE.AmbientLight(0xffe9cc, 0.14);
     this.scene.add(this.ambient);
 
-    this.sun = new THREE.DirectionalLight(0xfff4e0, 1.5);
-    this.sun.position.set(48, 66, 28);
+    // Low, warm sun raking across the site → long late-afternoon shadows.
+    this.sun = new THREE.DirectionalLight(0xffcd83, 1.75);
+    this.sun.position.set(56, 33, 24);
     this.sun.castShadow = true;
     this.sun.shadow.mapSize.set(2048, 2048);
-    const s = 72;
+    const s = 88; // wider frustum to fit the long shadows
     this.sun.shadow.camera.left = -s;
     this.sun.shadow.camera.right = s;
     this.sun.shadow.camera.top = s;
     this.sun.shadow.camera.bottom = -s;
     this.sun.shadow.camera.near = 1;
-    this.sun.shadow.camera.far = 220;
+    this.sun.shadow.camera.far = 300;
     this.sun.shadow.bias = -0.0004;
     this.sun.shadow.radius = 3;
     this.scene.add(this.sun);
@@ -353,11 +355,11 @@ export class GameView {
 
     // Distinct sky/lighting per hazard.
     const presets: Record<string, { sky: number; sun: number; hemi: number; near: number; far: number }> = {
-      clear: { sky: 0xaab7c2, sun: 1.5, hemi: 0.9, near: 95, far: 215 },
-      rain: { sky: 0x596169, sun: 0.5, hemi: 0.6, near: 55, far: 150 },
-      osha: { sky: 0x9fb2c6, sun: 1.2, hemi: 0.95, near: 90, far: 210 },
-      shortage: { sky: 0xb7a47a, sun: 1.35, hemi: 0.85, near: 48, far: 135 },
-      strike: { sky: 0x96999a, sun: 1.0, hemi: 0.75, near: 80, far: 200 },
+      clear: { sky: 0xc6b694, sun: 1.75, hemi: 0.72, near: 46, far: 152 },
+      rain: { sky: 0x596169, sun: 0.55, hemi: 0.6, near: 32, far: 110 },
+      osha: { sky: 0xb8b08f, sun: 1.45, hemi: 0.75, near: 44, far: 145 },
+      shortage: { sky: 0xc4ab78, sun: 1.55, hemi: 0.68, near: 36, far: 115 },
+      strike: { sky: 0xa39a85, sun: 1.1, hemi: 0.62, near: 42, far: 140 },
     };
     const p = presets[this.weather];
     this.weatherSky.setHex(p.sky);

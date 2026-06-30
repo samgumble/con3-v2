@@ -295,6 +295,13 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- Golden-hour lighting + atmospheric fog (game-view.ts). The directional sun is
+  now low + warm (`0xffcd83` at (56,33,24), intensity 1.75) for long raking
+  shadows (shadow frustum widened to ±88, far 300); hemi/ambient warmed to match.
+  The scene `Fog` was pulled in from near 95 → ~46 (warm `0xc6b694`) so the lot
+  fades into a hazy distance for real depth — the play area stays clear at normal
+  zoom. Per-hazard presets (`setWeather`) re-tuned to the warm baseline with
+  closer fog. Verified in-browser at near + far zoom.
 - Terrain detail pass (game-view.ts `buildGround`). The flat dirt slab is now a
   subdivided (84×84) vertex-coloured surface tinted by cheap value noise
   (`fbm`/`vnoise`/`thash`) so it reads as graded dirt, with gentle perimeter
