@@ -33,13 +33,19 @@ through Roofing; cannot gather). Any unit can build; only gatherers harvest.
 
 ## 2. Live / repo / deploy
 
-- **Play:** https://con3-v2.netlify.app
+- **Play (LIVE):** https://samgumble.github.io/con3-v2/  ← GitHub Pages, primary host
 - **Repo:** https://github.com/samgumble/con3-v2 (public)
-- **Shipping:** push to `main` → GitHub Actions (`.github/workflows/deploy.yml`)
-  builds the client and deploys to Netlify via `nwtgck/actions-netlify`. Secrets
-  `NETLIFY_AUTH_TOKEN` + `NETLIFY_SITE_ID` are already configured. No manual step.
+- **Shipping:** push to `main` → GitHub Actions (`.github/workflows/pages.yml`)
+  builds the client, uploads `apps/client/dist` via `upload-pages-artifact`, and
+  publishes with `deploy-pages`. No secrets, no credit cap, no manual step.
+  Subpath hosting works because Vite `base` is `"./"` (relative asset URLs).
 - After pushing, watch with `gh run watch <id> --exit-status`. The Node-20
   deprecation warning in CI is harmless.
+- **Netlify is a manual backup only** (`.github/workflows/deploy.yml`,
+  `workflow_dispatch`-only). Netlify currently blocks new deploys with "account
+  credit usage exceeded" — the `NETLIFY_AUTH_TOKEN` secret holds a VALID token,
+  the account is just over its credit cap. Once credits reset/are added, run that
+  workflow from the Actions tab to restore the con3-v2.netlify.app mirror.
 
 ## 3. Run / test / verify
 
@@ -229,12 +235,20 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- DEPLOY FIXED + migrated to GitHub Pages. Root cause of the failed deploys was
+  NOT the token: Netlify returns 403 "account credit usage exceeded — new deploys
+  are blocked until credits are added" (an account billing cap, hit after many
+  deploy iterations). Fresh token verified valid (reads /user + the site fine) and
+  stored in NETLIFY_AUTH_TOKEN, but the cap still blocks Netlify. Switched primary
+  hosting to GitHub Pages (`pages.yml`): free, no caps. LIVE at
+  https://samgumble.github.io/con3-v2/ (verified 200, JS bundle loads at subpath).
+  Netlify demoted to manual backup (workflow_dispatch only).
+- More effects: rising smoke columns from two site generators, camera screen-shake
+  on lightning strikes, dust-burst on building placement; fixed traffic-cone shape.
 - Graphics 10x: ACES tone mapping + UnrealBloom post-processing; hazard weather
   (rain streaks + lightning flashes + per-hazard atmospheres) via
   GameView.setWeather(); unit motion-bob + slewing HQ tower crane; carried-
-  material crates on haulers. NOTE: Netlify deploys are FAILING (Forbidden) since
-  ~03:21 — the Netlify token was revoked/expired; needs a fresh token in the
-  NETLIFY_AUTH_TOKEN GH secret. All work is on GitHub + runs locally.
+  material crates on haulers.
 - CAT-dashboard HUD re-skin (brushed steel, rivets, hazard stripes, LED type).
 - Gameplay depth: distinct unit roles (worker/excavator/crane) + economy loop
   (material storage cap, Funds from HQ phase completions, crane-gated tall phases).

@@ -51,8 +51,15 @@ apps/
   client/   Vite app wiring sim + engine + HUD
 ```
 
-## Deploy (Netlify)
+## Deploy (GitHub Pages)
 
-`netlify.toml` is preconfigured: install at the repo root, build the client,
-publish `apps/client/dist`. Connect the GitHub repo to Netlify and it deploys
-on push — no server required (the slice is fully static).
+**Live:** https://samgumble.github.io/con3-v2/
+
+Pushing to `main` runs `.github/workflows/pages.yml`, which builds the client and
+publishes `apps/client/dist` to GitHub Pages — no server required (fully static).
+Vite's `base: "./"` keeps asset URLs relative so the `/con3-v2/` subpath works.
+
+A Netlify mirror (`netlify.toml` + `.github/workflows/deploy.yml`) is kept as a
+manual backup but is currently blocked by a Netlify account credit cap; run that
+workflow from the Actions tab to restore https://con3-v2.netlify.app once credits
+are available.
