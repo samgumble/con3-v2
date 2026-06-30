@@ -3,7 +3,7 @@ import { C, type Collider, type Transform, type Unit } from "../components";
 import { SpatialHash } from "../spatial-hash";
 
 const CELL = 3;
-const SEP_ITERS = 2; // relaxation passes to resolve dense multi-unit pileups
+const SEP_ITERS = 3; // relaxation passes to resolve dense multi-unit pileups
 
 /**
  * Safety net after steering: resolve any residual overlaps and push units out

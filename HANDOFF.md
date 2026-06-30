@@ -104,10 +104,17 @@ worker assigned to the HQ). `C` is the string-key registry.
 
 ## 6. Systems (packages/sim/src/systems/ + GameSim)
 
-- **movement.ts** — steering path-follow. Seek waypoint + neighbor/obstacle
-  avoidance (repel + tangential sidestep), velocity **smoothed** (`ACCEL`) to
-  kill jitter, arrival easing near the final waypoint, stuck-detection replan.
-  Uses `grid` (A*) + `SpatialHash`. Tunables at top of file.
+- **movement.ts** — steering path-follow. Seek waypoint + **predictive**
+  neighbour avoidance (projects relative velocity to the closest point of
+  approach and steers to miss it early), **reciprocal** (moving neighbours share
+  the dodge ~60/40 so they don't over-correct), **congestion speed-easing**
+  (`SLOW_ON_AVOID` — units slow in crowds instead of barging), plus tangential
+  sidestep + static-obstacle avoidance. Velocity **smoothed** (`ACCEL`) to kill
+  jitter; arrival easing near the final waypoint; stuck-detection replan. Reads a
+  start-of-tick velocity snapshot so it stays order-independent/deterministic.
+  IMPORTANT: relVel is neighbour−self (must match relPos = neighbour−self) — the
+  sign matters; flipping it kills the look-ahead for head-on pairs. `AVOID_MAX` is
+  kept below `SEEK` so units always make forward progress. Tunables at top of file.
 - **avoidance.ts** (`separationSystem`) — mobility-weighted de-overlap (movers
   yield to idle anchors) + push units out of obstacle circles. 2 relax passes.
 - **harvest.ts** — gather state machine: toNode→mining→toDrop→unloading. Drains
@@ -266,6 +273,15 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- Navigation upgrade (player: units get stuck / bad at walking around each other).
+  movement.ts rewritten with **predictive** neighbour avoidance (closest-point-of-
+  approach steering using a start-of-tick velocity snapshot — kept deterministic),
+  **reciprocal** dodging (movers share the work), and **congestion speed-easing**;
+  `AVOID_MAX` lowered below `SEEK` so units always advance; separation passes 2→3;
+  `commandMove` now spreads a group over an even phyllotaxis disc instead of one
+  thin ring. Verified: 16-unit head-on swap → max overlap 0.009, all arrive, 0
+  jitter; 20-unit pile-up → max overlap 0.001, all settle; 3× identical runs are
+  byte-identical (determinism intact). (Watch the relVel sign — see §6.)
 - Anti-softlock economy audit (player hit a dead-end at the crane gate: out of
   deposits, no Funds, couldn't reach Industrial/Crane Yard/Crane). Fixes in
   world.ts + harvest.ts: **deposits are now renewable** — they regenerate toward

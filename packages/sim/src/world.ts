@@ -323,13 +323,18 @@ export class GameSim {
   /** Order entities to move to a world point, pathing around obstacles. */
   commandMove(entities: Iterable<Entity>, x: number, z: number): void {
     const list = [...entities].filter((e) => this.world.has(e, C.Unit));
-    const ring = Math.max(0, Math.ceil(Math.sqrt(list.length)) - 1) * 1.1;
+    // Spread the group over an even disc (phyllotaxis / sunflower packing) so a
+    // large order doesn't crowd a single thin ring around the target — each unit
+    // gets its own slot, which keeps the destination from gridlocking.
+    const SPACING = 1.4;
+    const GOLDEN = 2.399963229728653; // golden angle (radians)
     list.forEach((e, i) => {
       this.world.remove(e, C.Harvester); // a manual move cancels harvesting
       const t = this.world.get<Transform>(e, C.Transform)!;
-      const angle = (i / Math.max(1, list.length)) * Math.PI * 2;
-      const tx = x + Math.cos(angle) * ring;
-      const tz = z + Math.sin(angle) * ring;
+      const r = list.length > 1 ? SPACING * Math.sqrt(i) : 0;
+      const angle = i * GOLDEN;
+      const tx = x + Math.cos(angle) * r;
+      const tz = z + Math.sin(angle) * r;
       const path = findPath(this.grid, t.x, t.z, tx, tz);
       if (path) {
         this.world.add<PathFollow>(e, C.PathFollow, {
