@@ -7,15 +7,16 @@ const app = document.getElementById("app")!;
 // --- Simulation -----------------------------------------------------------
 const sim = new GameSim();
 
-// Seed a small starting crew so there's something to command.
-for (let i = 0; i < 6; i++) {
-  sim.spawnUnit(-7 + i * 2.4, 5, i % 3 === 0 ? "excavator" : "worker");
+// Seed a starting crew in the clear northern yard (obstacles are to the south).
+for (let i = 0; i < 8; i++) {
+  sim.spawnUnit(-9 + i * 2.4, 7 + (i % 2) * 1.6, i % 3 === 0 ? "excavator" : "worker");
 }
-sim.spawnUnit(0, -6, "crane");
-sim.spawnUnit(4, -7, "crane");
+sim.spawnUnit(-3, 11, "crane");
+sim.spawnUnit(3, 11, "crane");
 
 // --- Renderer -------------------------------------------------------------
 const view = new GameView(app);
+view.setObstacles(sim.obstacles); // static rock piles / stockpiles
 view.onTick(sim.snapshot()); // seed visuals before first frame
 
 // --- Selection + commands -------------------------------------------------

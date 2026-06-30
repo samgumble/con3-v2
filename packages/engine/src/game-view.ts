@@ -12,6 +12,25 @@ export interface RenderUnit {
   selected: boolean;
 }
 
+/** Static map obstacle to render (rock pile or material stockpile). */
+export interface RenderObstacle {
+  x: number;
+  z: number;
+  radius: number;
+  kind: "rocks" | "stockpile";
+}
+
+/** Small deterministic RNG so obstacle decoration is stable across reloads. */
+function mulberry32(seed: number): () => number {
+  return () => {
+    seed |= 0;
+    seed = (seed + 0x6d2b79f5) | 0;
+    let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+
 interface Visual {
   group: THREE.Group;
   ring: THREE.Mesh;
@@ -101,6 +120,57 @@ export class GameView {
     (grid.material as THREE.Material).transparent = true;
     grid.position.y = 0.01;
     this.scene.add(grid);
+  }
+
+  /** Build static obstacle meshes once. Call after construction. */
+  setObstacles(obstacles: RenderObstacle[]): void {
+    for (const o of obstacles) this.scene.add(this.buildObstacle(o));
+  }
+
+  private buildObstacle(o: RenderObstacle): THREE.Group {
+    const group = new THREE.Group();
+    group.position.set(o.x, 0, o.z);
+    const rand = mulberry32(Math.floor((o.x + 1000) * 73856093) ^ Math.floor((o.z + 1000) * 19349663));
+
+    if (o.kind === "rocks") {
+      const mat = new THREE.MeshStandardMaterial({ color: 0x8d8377, roughness: 1, flatShading: true });
+      const count = 4 + Math.floor(rand() * 4);
+      for (let i = 0; i < count; i++) {
+        const r = 0.5 + rand() * (o.radius * 0.35);
+        const rock = new THREE.Mesh(new THREE.IcosahedronGeometry(r, 0), mat);
+        const a = rand() * Math.PI * 2;
+        const dr = rand() * o.radius * 0.7;
+        rock.position.set(Math.cos(a) * dr, r * 0.55, Math.sin(a) * dr);
+        rock.rotation.set(rand() * 3, rand() * 3, rand() * 3);
+        rock.scale.y = 0.7 + rand() * 0.5;
+        rock.castShadow = true;
+        rock.receiveShadow = true;
+        group.add(rock);
+      }
+    } else {
+      // Stockpile: stacked material crates/bags.
+      const colors = [0xc9a14a, 0x9fa6ad, 0xb5651d];
+      const count = 5 + Math.floor(rand() * 4);
+      for (let i = 0; i < count; i++) {
+        const s = 0.8 + rand() * 0.7;
+        const crate = new THREE.Mesh(
+          new THREE.BoxGeometry(s, s * 0.7, s),
+          new THREE.MeshStandardMaterial({
+            color: colors[Math.floor(rand() * colors.length)],
+            roughness: 0.85,
+            flatShading: true,
+          }),
+        );
+        const a = rand() * Math.PI * 2;
+        const dr = rand() * o.radius * 0.6;
+        crate.position.set(Math.cos(a) * dr, (s * 0.7) / 2 + (rand() < 0.3 ? s * 0.7 : 0), Math.sin(a) * dr);
+        crate.rotation.y = rand() * Math.PI;
+        crate.castShadow = true;
+        crate.receiveShadow = true;
+        group.add(crate);
+      }
+    }
+    return group;
   }
 
   private buildUnitVisual(u: RenderUnit): Visual {

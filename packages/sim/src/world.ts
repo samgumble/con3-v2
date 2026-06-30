@@ -1,16 +1,23 @@
 import { World, type Entity } from "@con3/ecs";
 import {
   C,
+  type PathFollow,
   type Selectable,
   type Transform,
   type Unit,
   type UnitKind,
 } from "./components";
+import { NavGrid } from "./grid";
+import { findPath } from "./pathfind";
 import { movementSystem } from "./systems/movement";
+import { avoidanceSystem } from "./systems/avoidance";
 
 /** Fixed simulation rate. The renderer interpolates between ticks. */
 export const TICK_RATE = 20;
 export const TICK_DT = 1 / TICK_RATE; // seconds per tick
+
+/** Half-extent of the playable area in world units. */
+export const MAP_HALF = 60;
 
 const SPEED: Record<UnitKind, number> = {
   worker: 4,
@@ -24,13 +31,43 @@ const RADIUS: Record<UnitKind, number> = {
   crane: 1.0,
 };
 
+export interface Obstacle {
+  x: number;
+  z: number;
+  radius: number;
+  kind: "rocks" | "stockpile";
+}
+
 /**
- * Owns the ECS world and advances it one fixed tick at a time.
- * Rendering reads state via `snapshot()`; it never mutates the sim.
+ * Owns the ECS world, the navigation grid, and advances the sim one fixed tick
+ * at a time. Rendering reads state via the snapshot methods; it never mutates.
  */
 export class GameSim {
   readonly world = new World();
+  readonly grid = NavGrid.centered(MAP_HALF, 2);
+  readonly obstacles: Obstacle[] = [];
   tick = 0;
+
+  constructor() {
+    this.spawnObstacles();
+  }
+
+  /** Scatter rock piles into a rough barrier so pathfinding has to route. */
+  private spawnObstacles(): void {
+    const defs: Obstacle[] = [
+      { x: -2, z: -4, radius: 4.5, kind: "rocks" },
+      { x: -12, z: -3, radius: 3.5, kind: "rocks" },
+      { x: 8, z: -5, radius: 3.5, kind: "rocks" },
+      { x: 16, z: -2, radius: 3, kind: "rocks" },
+      { x: -22, z: -6, radius: 3, kind: "rocks" },
+      { x: 24, z: 6, radius: 3.5, kind: "stockpile" },
+      { x: -26, z: 8, radius: 3, kind: "stockpile" },
+    ];
+    for (const o of defs) {
+      this.obstacles.push(o);
+      this.grid.blockCircle(o.x, o.z, o.radius);
+    }
+  }
 
   spawnUnit(x: number, z: number, kind: UnitKind = "worker"): Entity {
     const e = this.world.create();
@@ -44,17 +81,20 @@ export class GameSim {
     return e;
   }
 
-  /** Order the given entities to move to a world point. */
+  /** Order entities to move to a world point, pathing around obstacles. */
   commandMove(entities: Iterable<Entity>, x: number, z: number): void {
-    // Spread destinations slightly so units don't stack on one point.
-    const list = [...entities];
-    const ring = Math.max(0, Math.ceil(Math.sqrt(list.length)) - 1) * 0.9;
+    const list = [...entities].filter((e) => this.world.has(e, C.Unit));
+    // Spread destinations on a ring so the group fans out instead of stacking.
+    const ring = Math.max(0, Math.ceil(Math.sqrt(list.length)) - 1) * 1.1;
     list.forEach((e, i) => {
-      if (!this.world.has(e, C.Unit)) return;
+      const t = this.world.get<Transform>(e, C.Transform)!;
       const angle = (i / Math.max(1, list.length)) * Math.PI * 2;
-      const ox = Math.cos(angle) * ring;
-      const oz = Math.sin(angle) * ring;
-      this.world.add(e, C.MoveTarget, { x: x + ox, z: z + oz });
+      const tx = x + Math.cos(angle) * ring;
+      const tz = z + Math.sin(angle) * ring;
+      const path = findPath(this.grid, t.x, t.z, tx, tz);
+      if (path) {
+        this.world.add<PathFollow>(e, C.PathFollow, { waypoints: path, index: 0 });
+      }
     });
   }
 
@@ -74,6 +114,7 @@ export class GameSim {
   /** Advance exactly one fixed tick. */
   step(): void {
     movementSystem(this.world, TICK_DT);
+    avoidanceSystem(this.world);
     this.tick++;
   }
 
@@ -92,6 +133,7 @@ export class GameSim {
         kind: u.kind,
         radius: u.radius,
         selected: s?.selected ?? false,
+        moving: this.world.has(e, C.PathFollow),
       });
     }
     return out;
@@ -106,4 +148,5 @@ export interface UnitSnapshot {
   kind: UnitKind;
   radius: number;
   selected: boolean;
+  moving: boolean;
 }

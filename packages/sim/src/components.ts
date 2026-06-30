@@ -14,10 +14,11 @@ export interface Transform {
   rot: number;
 }
 
-/** Desired destination; removed once reached. */
-export interface MoveTarget {
-  x: number;
-  z: number;
+/** A sequence of world-space waypoints the unit walks in order. */
+export interface PathFollow {
+  waypoints: { x: number; z: number }[];
+  /** Index of the waypoint currently being walked toward. */
+  index: number;
 }
 
 /** Marks a controllable unit and its movement profile. */
@@ -38,7 +39,7 @@ export type UnitKind = "worker" | "excavator" | "crane";
 
 export const C = {
   Transform: "Transform",
-  MoveTarget: "MoveTarget",
+  PathFollow: "PathFollow",
   Unit: "Unit",
   Selectable: "Selectable",
 } as const;
