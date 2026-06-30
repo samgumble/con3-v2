@@ -83,8 +83,26 @@ export function harvestSystem(
     const u = world.get<Unit>(e, C.Unit)!;
 
     switch (h.state) {
-      case "idle":
+      case "idle": {
+        // Self-heal: never strand a crew idle after a dry spell — drop any load,
+        // then resume the moment a deposit has restocked.
+        if (h.carrying > 0) {
+          const drop = nearestDrop(world, t.x, t.z);
+          if (drop) {
+            h.dropId = drop;
+            const dtf = world.get<Transform>(drop, C.Transform)!;
+            h.state = "toDrop";
+            setPath(world, grid, e, dtf.x, dtf.z);
+          }
+          break;
+        }
+        const node = nearestNode(world, t.x, t.z);
+        if (node) {
+          h.nodeId = node;
+          h.state = "toNode";
+        }
         break;
+      }
 
       case "toNode": {
         let node = h.nodeId && world.isAlive(h.nodeId) ? h.nodeId : 0;
@@ -115,15 +133,21 @@ export function harvestSystem(
           h.state = "toNode";
           break;
         }
+        const nm = world.get<ResourceNode>(node, C.ResourceNode)!;
+        // Deposit tapped out (it will restock) — go find one with materials.
+        if (nm.amount <= 0) {
+          h.nodeId = 0;
+          h.state = "toNode";
+          break;
+        }
         h.timer -= dt;
         if (h.timer <= 0) {
-          const n = world.get<ResourceNode>(node, C.ResourceNode)!;
-          const take = Math.min(h.capacity, n.amount);
-          n.amount -= take;
+          const take = Math.min(h.capacity, nm.amount);
+          nm.amount -= take;
           h.carrying = take;
-          const depleted = n.amount <= 0;
-          if (depleted) world.destroy(node);
-          h.nodeId = depleted ? 0 : node;
+          // Deposits are renewable — never destroyed. If we just emptied it,
+          // pick a fresh one for the next trip.
+          h.nodeId = nm.amount <= 0 ? 0 : node;
 
           const drop = nearestDrop(world, t.x, t.z);
           h.dropId = drop;

@@ -272,6 +272,51 @@ body,
   font-weight: 700;
   animation: hazardpulse 1.3s ease-in-out infinite;
 }
+.mega-retainer {
+  margin-top: 8px;
+  padding-top: 7px;
+  border-top: 1px solid var(--edge);
+  font-family: var(--font-disp);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 0.6px;
+  color: var(--muted);
+}
+.mega-retainer b {
+  font-family: var(--font-led);
+  color: var(--green);
+}
+
+/* Progress-payment toast (a monthly draw landing). */
+#payment-toast {
+  position: fixed;
+  top: 84px;
+  left: 50%;
+  transform: translateX(-50%) translateY(-12px);
+  z-index: 30;
+  padding: 9px 20px;
+  background: linear-gradient(180deg, #2c3138, #1d2127);
+  border: 1px solid var(--cat-yellow);
+  border-radius: 5px;
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.5), inset 0 0 0 1px rgba(0, 0, 0, 0.4);
+  font-family: var(--font-disp);
+  font-weight: 700;
+  font-size: 15px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--green);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 0.25s ease, transform 0.25s ease;
+}
+#payment-toast.show {
+  opacity: 1;
+  transform: translateX(-50%) translateY(0);
+}
+#payment-toast .amt {
+  font-family: var(--font-led);
+  color: var(--led);
+}
 
 /* --- Bottom-left status / selection panel --------------------------------- */
 #hud {

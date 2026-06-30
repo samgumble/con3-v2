@@ -125,7 +125,18 @@ export const LICENSE_TIERS: LicenseTier[] = [
 ];
 
 /** Base permit trickle so progress is possible even without a Permit Office. */
-const BASE_PERMIT_RATE = 0.1;
+const BASE_PERMIT_RATE = 0.15;
+
+/** Each deposit slowly restocks toward its max so the site never runs dry —
+ *  gathering may get slower, but it can never permanently dead-end. */
+const DEPOSIT_REGEN = 1.0; // materials/sec per deposit
+
+/** A "month" between progress payments — a slow retainer that keeps Funds
+ *  growing even when a phase is blocked, so the player never hard-locks. The
+ *  payment grows as the HQ advances (a bigger draw on a bigger project). */
+const GAME_MONTH = 50; // seconds per payment
+const MONTHLY_BASE = 40; // funds paid at phase 0
+const MONTHLY_PER_PHASE = 6; // extra funds per completed HQ phase
 
 /** Global effect modifiers, altered by active hazards. */
 interface Mods {
@@ -195,6 +206,13 @@ export class GameSim {
   private readonly rng = mulberry32(0x9e3779b9);
   private nextHazardIn = 45 + this.rng() * 30; // first event ~45–75s in
 
+  // Finance: a slow monthly progress payment so Funds never dead-end.
+  private monthTimer = GAME_MONTH;
+  /** Amount of the most recent monthly payment (for the HUD toast). */
+  lastPayment = 0;
+  /** Count of payments made — the HUD watches this to fire a notification. */
+  paymentsCount = 0;
+
   constructor() {
     this.spawnObstacles();
     this.spawnBuilding("fieldOffice", -14, 17, true); // operations base
@@ -237,10 +255,10 @@ export class GameSim {
 
   private spawnDeposits(): void {
     const defs = [
-      { x: -22, z: 22, amount: 600 },
-      { x: 20, z: 24, amount: 600 },
-      { x: -32, z: -8, amount: 500 },
-      { x: 32, z: -6, amount: 500 },
+      { x: -22, z: 22, amount: 800 },
+      { x: 20, z: 24, amount: 800 },
+      { x: -32, z: -8, amount: 700 },
+      { x: 32, z: -6, amount: 700 },
     ];
     for (const d of defs) this.spawnDeposit(d.x, d.z, d.amount);
   }
@@ -693,10 +711,47 @@ export class GameSim {
     }
     this.economy.permits += permitRate * TICK_DT;
 
+    // Deposits slowly restock so the site can never run permanently dry.
+    for (const e of this.world.query(C.ResourceNode)) {
+      const n = this.world.get<ResourceNode>(e, C.ResourceNode)!;
+      if (n.amount < n.maxAmount) {
+        n.amount = Math.min(n.maxAmount, n.amount + DEPOSIT_REGEN * TICK_DT);
+      }
+    }
+
+    // Monthly progress payment: a slow retainer so Funds keep growing even when
+    // a phase is blocked — the player can always work toward the next upgrade /
+    // crane and never gets permanently stuck.
+    this.monthTimer -= TICK_DT;
+    if (this.monthTimer <= 0) {
+      this.monthTimer += GAME_MONTH;
+      this.lastPayment = MONTHLY_BASE + MONTHLY_PER_PHASE * this.megaPhase();
+      this.economy.funds += this.lastPayment;
+      this.paymentsCount++;
+    }
+
     let labor = 0;
     for (const e of this.world.query(C.Unit)) labor += UNITS[this.world.get<Unit>(e, C.Unit)!.kind].labor;
     this.economy.laborUsed = labor;
     this.tick++;
+  }
+
+  /** Current HQ phase index (0-based), or 0 if there is no megaproject. */
+  private megaPhase(): number {
+    for (const e of this.world.query(C.MegaProject)) {
+      return this.world.get<MegaProject>(e, C.MegaProject)!.phaseIndex;
+    }
+    return 0;
+  }
+
+  /** Progress-payment status for the HUD: seconds to the next draw, the amount
+   *  it will pay, and a monotonic count the HUD uses to toast when one lands. */
+  financeStatus(): { nextIn: number; amount: number; count: number } {
+    return {
+      nextIn: Math.max(0, Math.ceil(this.monthTimer)),
+      amount: MONTHLY_BASE + MONTHLY_PER_PHASE * this.megaPhase(),
+      count: this.paymentsCount,
+    };
   }
 
   snapshot(): UnitSnapshot[] {

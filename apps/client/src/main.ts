@@ -337,14 +337,35 @@ const megaEff = document.getElementById("mega-eff")!;
 const megaOverall = document.getElementById("mega-overall")!;
 const megaPct = document.getElementById("mega-pct")!;
 const megaHint = document.getElementById("mega-hint")!;
+const megaRetainer = document.getElementById("mega-retainer")!;
+const paymentToast = document.getElementById("payment-toast")!;
 const victory = document.getElementById("victory")!;
 const victoryStats = document.getElementById("victory-stats")!;
 document.getElementById("victory-restart")!.addEventListener("click", () => location.reload());
 
 const pct = (v: number) => `${Math.max(0, Math.min(100, v * 100))}%`;
 
+// Progress-payment toast: flash when a monthly draw lands.
+let lastPaymentsCount = 0;
+let paymentToastTimer: ReturnType<typeof setTimeout> | null = null;
+function flashPayment(amount: number): void {
+  paymentToast.innerHTML = `💵 Progress payment <span class="amt">+$${amount}</span>`;
+  paymentToast.classList.remove("hidden");
+  paymentToast.classList.add("show");
+  if (paymentToastTimer) clearTimeout(paymentToastTimer);
+  paymentToastTimer = setTimeout(() => paymentToast.classList.remove("show"), 2600);
+}
+
 function updateHud(): void {
   const eco = sim.economy;
+
+  // Monthly progress payment: keep the retainer readout live + toast on payday.
+  const fin = sim.financeStatus();
+  megaRetainer.innerHTML = `Progress payment <b>$${fin.amount}</b> · next in ${fin.nextIn}s`;
+  if (fin.count > lastPaymentsCount) {
+    lastPaymentsCount = fin.count;
+    flashPayment(sim.lastPayment);
+  }
 
   // Megaproject phase tracker.
   const mp = sim.megaprojectStatus();

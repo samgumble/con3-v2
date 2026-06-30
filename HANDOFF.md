@@ -142,7 +142,11 @@ octile, binary heap, no corner-cutting). `spatial-hash.ts` = neighbor queries.
   Gathering past the cap wastes materials. Funds come from `fundsReward` on phase
   completion (no passive funds source otherwise).
 - `LICENSE_TIERS` — Residential→Commercial→Industrial→Skyscraper upgrade costs
-  (funds+permits). `BASE_PERMIT_RATE`.
+  (funds+permits). `BASE_PERMIT_RATE` (0.15).
+- **Anti-softlock safety nets** (so the game can't dead-end): `DEPOSIT_REGEN`
+  (deposits restock/s; they're never destroyed — see harvest.ts), and the monthly
+  progress payment `GAME_MONTH` / `MONTHLY_BASE` / `MONTHLY_PER_PHASE` (a slow
+  Funds retainer scaling with HQ phase). `financeStatus()` feeds the HUD.
 - `HAZARDS` — 4 events with duration + `Mods` partials.
 - Movement feel: constants at top of `systems/movement.ts`.
 - Harvest carry capacity / timings: `harvest.ts` + `assignHarvest` (capacity 12).
@@ -262,6 +266,17 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- Anti-softlock economy audit (player hit a dead-end at the crane gate: out of
+  deposits, no Funds, couldn't reach Industrial/Crane Yard/Crane). Fixes in
+  world.ts + harvest.ts: **deposits are now renewable** — they regenerate toward
+  max at `DEPOSIT_REGEN`/s and are **never destroyed** on depletion, so materials
+  can't permanently run out; **idle gatherers self-heal** (resume when a deposit
+  restocks); a slow **monthly progress payment** (`GAME_MONTH`/`MONTHLY_BASE` +
+  `MONTHLY_PER_PHASE`, exposed via `financeStatus()`, field `lastPayment`/
+  `paymentsCount`) keeps Funds growing even when a phase is blocked; bumped
+  `BASE_PERMIT_RATE` 0.1→0.15 and deposit sizes (800/800/700/700). HUD: megapanel
+  retainer readout (`#mega-retainer`) + a payment toast (`#payment-toast`).
+  GUIDE.md updated. Net effect: it may take longer, but the game can't dead-end.
 - Worker effort animation: on-site units assigned to a build (`task` `build`/`mega`
   and no longer moving) now play a rhythmic heave — a forward hammer/dig lean +
   bob — and puff debris on each downstroke, with welding sparks for crews on the

@@ -102,10 +102,16 @@ Funds. Higher-tier buildings need a higher **license** (see below).
 
 Tracked along the **top resource bar**.
 
-- **💵 Funds** — start with **500**. Earned by completing HQ phases. Spent on
-  units, the costlier buildings, and license upgrades.
-- **🧱 Materials** — mined from deposits, banked at drop-offs. **Capped by storage**
-  (start: 100; raise it with Depots). Spent on HQ phases and most buildings.
+- **💵 Funds** — start with **500**. Two income streams: a **Funds payout each
+  time you complete an HQ phase** (the big one), plus a slow **monthly progress
+  payment** — a retainer that pays out automatically every ~50s and grows as the
+  HQ rises. The retainer means Funds *always* keep climbing, so you can never get
+  permanently broke even if a phase is blocked. Spent on units, the costlier
+  buildings, and license upgrades.
+- **🧱 Materials** — mined from deposits, banked at drop-offs. **Deposits are
+  renewable** — they slowly restock over time, so the site never runs dry (and
+  idle crews automatically go back to work once a deposit refills). **Capped by
+  storage** (start: 100; raise it with Depots). Spent on HQ phases and most buildings.
 - **👷 Labor** — your population cap, shown as *used / total*. Each unit takes 1–3.
   Raise the cap with the Field Office (16) and **Trailers** (+10 each).
 - **📋 Permits** — the currency for license upgrades. A slow base trickle, sped up
@@ -209,9 +215,18 @@ just moves — each with a coloured ping so you can see the order land.
 6. **Upgrade to Commercial → build a Workshop → train Excavators** to scale up
    your Materials supply.
 7. **Upgrade to Industrial → build a Crane Yard → train a Crane** *before* you hit
-   the Superstructure phase. Don't let phase 6 catch you crane-less.
+   the Superstructure phase. Don't let phase 6 catch you crane-less. Note the
+   Crane Yard costs **180 Materials** but your base storage is only 100 — so
+   **build a Depot first** (it raises the cap to 320) or you won't be able to
+   bank enough to afford it.
 8. **Keep the Materials flowing** and push through phases 6–12 to top out the
    tower and win.
+
+> **Can't get stuck:** even if a phase is blocked (e.g. waiting on a crane),
+> deposits keep restocking, Permits keep trickling, and the monthly progress
+> payment keeps Funds growing — so you can always work your way toward the next
+> upgrade, building, or crane. It may take a while, but the project never
+> dead-ends.
 
 Good luck — now go build something. 🏗️
 
