@@ -28,6 +28,8 @@ function setPath(world: World, grid: NavGrid, e: Entity, tx: number, tz: number)
       stuckTicks: 0,
       bestDist: Infinity,
       replans: 0,
+      vx: 0,
+      vz: 0,
     });
   }
 }

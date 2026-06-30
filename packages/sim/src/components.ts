@@ -28,6 +28,9 @@ export interface PathFollow {
   bestDist: number;
   /** How many times the path has been replanned (give up after too many). */
   replans: number;
+  /** Smoothed velocity (steering inertia) so heading can't snap each tick. */
+  vx: number;
+  vz: number;
 }
 
 /** Marks a controllable unit and its movement profile. */

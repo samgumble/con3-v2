@@ -249,6 +249,8 @@ export class GameSim {
           stuckTicks: 0,
           bestDist: Infinity,
           replans: 0,
+          vx: 0,
+          vz: 0,
         });
       }
     });

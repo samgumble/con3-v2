@@ -14,19 +14,22 @@ import { SpatialHash } from "../spatial-hash";
 const SENSE = 4; // how far ahead a unit senses other units
 const SEEK = 1.3; // weight of the goal-seeking force (kept above avoidance)
 const AVOID_AWAY = 0.9; // repulsion strength from neighbors
-const AVOID_TANGENT = 0.9; // sidestep-around strength for neighbors
-const AVOID_MAX = 1.5; // cap on total avoidance so seek is never fully overridden
+const AVOID_TANGENT = 0.8; // sidestep-around strength for neighbors
+const AVOID_MAX = 1.4; // cap on total avoidance so seek is never fully overridden
 const OBST_BUFFER = 2; // extra reach when sensing obstacles
 const OBST_AWAY = 1.3;
-const OBST_TANGENT = 1.1;
+const OBST_TANGENT = 1.0;
 const ARRIVE_MID = 0.6; // waypoint reached radius (mid-path, steering cuts corners)
 const ARRIVE_FINAL = 0.12; // tighter radius for the final destination
+const ACCEL = 0.22; // velocity smoothing per tick — inertia that kills jitter
+const ARRIVE_SLOW = 2.5; // ease speed to zero within this distance of the final goal
+const STOP_SPEED2 = 0.04; // below this squared speed, hold heading (don't spin)
 
 // Stuck handling.
-const STUCK_LIMIT = 40; // ticks of no progress before replanning (~2s)
+const STUCK_LIMIT = 50; // ticks of no progress before replanning (~2.5s)
 const PROGRESS_EPS = 0.2; // distance-to-goal improvement that counts as progress
-const GIVE_UP_DIST = 3; // near a crowded goal this close, just stop
-const MAX_REPLANS = 3; // after this many replans without arriving, give up
+const GIVE_UP_DIST = 4; // near a crowded goal this close, just stop
+const MAX_REPLANS = 2; // after this many replans without arriving, give up
 
 /**
  * Walk units along their PathFollow waypoints with local steering. Each mover
@@ -127,20 +130,35 @@ export function movementSystem(
       az = (az / alen) * AVOID_MAX;
     }
 
-    // Blend (seek-biased) + avoidance, move at (possibly modified) speed.
+    // Target speed eases to zero near the FINAL waypoint so units settle into
+    // place instead of overshooting and orbiting the destination.
     const speed = u.speed * speedMul;
-    let vx = dx * SEEK + ax;
-    let vz = dz * SEEK + az;
-    const vlen = Math.hypot(vx, vz) || 1;
-    vx = (vx / vlen) * speed;
-    vz = (vz / vlen) * speed;
+    let targetSpeed = speed;
+    if (p.index === p.waypoints.length - 1) {
+      const distWp = Math.hypot(wp.x - t.x, wp.z - t.z);
+      targetSpeed = Math.min(speed, speed * (distWp / ARRIVE_SLOW));
+    }
+
+    // Desired velocity = seek-biased + avoidance, scaled to the target speed.
+    let dvx = dx * SEEK + ax;
+    let dvz = dz * SEEK + az;
+    const dvlen = Math.hypot(dvx, dvz) || 1;
+    dvx = (dvx / dvlen) * targetSpeed;
+    dvz = (dvz / dvlen) * targetSpeed;
+
+    // Smooth toward the desired velocity (inertia). This is the key fix for
+    // jitter: heading can't snap 180° in one tick when neighbors jostle.
+    p.vx += (dvx - p.vx) * ACCEL;
+    p.vz += (dvz - p.vz) * ACCEL;
 
     const minX = grid.originX + u.radius;
     const maxX = grid.originX + grid.width * grid.cellSize - u.radius;
     const minZ = grid.originZ + u.radius;
     const maxZ = grid.originZ + grid.height * grid.cellSize - u.radius;
-    const nx = clamp(t.x + vx * dt, minX, maxX);
-    const nz = clamp(t.z + vz * dt, minZ, maxZ);
+    const nx = clamp(t.x + p.vx * dt, minX, maxX);
+    const nz = clamp(t.z + p.vz * dt, minZ, maxZ);
+    const speed2 = p.vx * p.vx + p.vz * p.vz;
+    const rot = speed2 > STOP_SPEED2 ? Math.atan2(p.vx, p.vz) : t.rot;
 
     // Stuck detection: if we haven't gotten closer to the goal in a while, the
     // unit was likely shoved off-path — replan from where it actually is, or
@@ -169,7 +187,7 @@ export function movementSystem(
       }
     }
 
-    next.push({ e, x: nx, z: nz, rot: Math.atan2(vx, vz) });
+    next.push({ e, x: nx, z: nz, rot });
   }
 
   for (const np of next) {
