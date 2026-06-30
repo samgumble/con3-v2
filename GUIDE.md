@@ -93,7 +93,7 @@ Funds. Higher-tier buildings need a higher **license** (see below).
 | **HQ** | — | — | The megaproject. Win by finishing its 12 phases. (Already on site.) |
 | **Field Office** | pre-built | — | Your ops base: accepts Materials (drop-off), trains Workers, +16 labor, +100 storage. |
 | **Trailer** | 60 Materials | Residential | Worker housing: **+10 labor cap** so you can field more units. |
-| **Depot** | 70 Materials | Residential | Open storage yard: **+220 storage** and a **forward drop-off** that **stacks materials in plain view** — put it near the deposits to shorten the gather trip. |
+| **Depot** | 70 Materials | Residential | Open storage yard: **+220 storage** and a **forward drop-off** that **stacks materials in plain view** — put it near the deposits to shorten the gather trip. Once built, **new gathered supplies flow into the Depot** while the Field Office's stock is **drained first** by your HQ crew, so the supply naturally "moves over" to the Depot. |
 | **Permit Office** | 100 Funds + 80 Materials | Residential | Generates **Permits** (+0.7/sec) for license upgrades. |
 | **Workshop** | 120 Funds + 120 Materials | Commercial | Trains **Excavators**. |
 | **Crane Yard** | 220 Funds + 180 Materials | Industrial | Trains **Cranes** (required to top out the HQ). |

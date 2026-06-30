@@ -121,8 +121,11 @@ string-key registry.
 - **avoidance.ts** (`separationSystem`) — mobility-weighted de-overlap (movers
   yield to idle anchors) + push units out of obstacle circles. 2 relax passes.
 - **harvest.ts** — gather state machine: toNode→mining→toDrop→unloading. Drains
-  a `ResourceNode`, deposits into the drop-off building's own `Stockpile` (clamped
-  to its capacity) — materials now bank per-building, not in a global pool.
+  a `ResourceNode`, deposits into the drop-off's own `Stockpile` (clamped to its
+  capacity) — materials bank per-building, not in a global pool. `nearestDrop`
+  **prefers a depot** with room (then the field office, then overflow), so new
+  supplies pile into the depot once built. (Consumption is the mirror: `nearestStock`
+  + `spendMaterials` drain the **field office first**, then depots.)
 - **construction.ts** — `Builder`s walk to a support-building blueprint and add
   effort; `onComplete` calls `GameSim.completeBuilding` (registers DropOff,
   grants labor). NOTE: skips builders whose target isn't a `Construction` — the
@@ -289,6 +292,16 @@ real glTF assets.
 
 ## 14. Session changelog (newest first)
 
+- Stockpile delivery/consumption priority (trailer → depot lifecycle). Gatherers
+  now **deliver to a depot** with room ahead of the field office (`nearestDrop`
+  in harvest.ts — `depot` kind scored first, full ones overflow), while ALL
+  consumption **drains the field office first**: `nearestStock` (megaproject
+  hauling) and `spendMaterials` (build costs) both prefer `fieldOffice` then
+  depots. Net: build a depot and new supplies pile into it while the trailer's
+  stock is used up, so it "moves over" to the depot. Kind-based, so it generalises
+  to any drop-off / multiple depots. Verified: gatherer delivered to the depot
+  (depot 8 / FO 0), HQ crew drained FO to 0 before the depot, 3 runs identical
+  (determinism intact).
 - Hold-right-click-drag pans the map + floors build out more slowly. (1)
   `RtsCamera.dragPan(dxPx,dyPx,viewportH)` grab-pans along the camera ground axes
   (scaled by zoom + tilt). main.ts now **defers the right-click action to mouseup**:

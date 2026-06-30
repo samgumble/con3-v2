@@ -412,14 +412,18 @@ export class GameSim {
     return this.economy.funds >= def.costFunds && this.economy.materials >= def.costMaterials;
   }
 
-  /** Draw `n` materials from the stockpiles (fullest first). Returns amount taken. */
+  /** Draw `n` materials from the stockpiles — the field office (base) first,
+   *  then depots (fullest first). Returns the amount actually taken. */
   private spendMaterials(n: number): number {
     let need = n;
     const piles = this.world
-      .query(C.Stockpile)
-      .map((e) => this.world.get<Stockpile>(e, C.Stockpile)!)
-      .sort((a, b) => b.amount - a.amount);
-    for (const sp of piles) {
+      .query(C.Stockpile, C.Building)
+      .map((e) => ({
+        sp: this.world.get<Stockpile>(e, C.Stockpile)!,
+        base: this.world.get<Building>(e, C.Building)!.kind === "fieldOffice",
+      }))
+      .sort((a, b) => (a.base !== b.base ? (a.base ? -1 : 1) : b.sp.amount - a.sp.amount));
+    for (const { sp } of piles) {
       if (need <= 0) break;
       const take = Math.min(sp.amount, need);
       sp.amount -= take;

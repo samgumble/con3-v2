@@ -41,17 +41,22 @@ function setPath(world: World, grid: NavGrid, e: Entity, tx: number, tz: number)
   }
 }
 
-/** Nearest completed stockpile building that still has materials, or 0. */
+/**
+ * A completed stockpile to fetch from. Drains the **field office** (base) first,
+ * then depots — so the trailer empties out before crews start pulling from the
+ * depot. Nearest breaks ties within a tier.
+ */
 function nearestStock(world: World, x: number, z: number): Entity {
   let best = 0;
-  let bestD = Infinity;
+  let bestScore = Infinity;
   for (const e of world.query(C.Stockpile, C.Transform, C.Building)) {
     if (world.has(e, C.Construction)) continue;
     if (world.get<Stockpile>(e, C.Stockpile)!.amount <= 0) continue;
     const t = world.get<Transform>(e, C.Transform)!;
-    const d = (t.x - x) ** 2 + (t.z - z) ** 2;
-    if (d < bestD) {
-      bestD = d;
+    const b = world.get<Building>(e, C.Building)!;
+    const score = (b.kind === "fieldOffice" ? 0 : 1e6) + (t.x - x) ** 2 + (t.z - z) ** 2;
+    if (score < bestScore) {
+      bestScore = score;
       best = e;
     }
   }

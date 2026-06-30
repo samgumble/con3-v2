@@ -33,15 +33,25 @@ function setPath(world: World, grid: NavGrid, e: Entity, tx: number, tz: number)
   }
 }
 
+/**
+ * Where a gatherer drops its load. Prefers a **depot** with room (the dedicated
+ * yard), then the field office, then any drop-off even if full (overflow);
+ * nearest breaks ties within a tier. So once you build a depot, new supplies
+ * flow into it and the field office is left to drain down.
+ */
 function nearestDrop(world: World, x: number, z: number): Entity {
   let best = 0;
-  let bestD = Infinity;
+  let bestScore = Infinity;
   for (const e of world.query(C.Building, C.DropOff, C.Transform)) {
     if (world.has(e, C.Construction)) continue; // unfinished buildings can't accept
     const t = world.get<Transform>(e, C.Transform)!;
-    const d = (t.x - x) ** 2 + (t.z - z) ** 2;
-    if (d < bestD) {
-      bestD = d;
+    const b = world.get<Building>(e, C.Building)!;
+    const sp = world.get<Stockpile>(e, C.Stockpile);
+    const full = sp ? sp.amount >= sp.capacity : false;
+    const score =
+      (b.kind === "depot" ? 0 : 1e6) + (full ? 1e9 : 0) + (t.x - x) ** 2 + (t.z - z) ** 2;
+    if (score < bestScore) {
+      bestScore = score;
       best = e;
     }
   }
