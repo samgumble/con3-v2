@@ -305,16 +305,32 @@ export class GameSim {
     for (const e of entities) {
       const u = this.world.get<Unit>(e, C.Unit);
       if (!u || !HARVEST_KINDS.has(u.kind)) continue;
+      this.world.remove(e, C.Builder);
+      this.world.remove(e, C.MegaBuilder);
       this.world.remove(e, C.PathFollow);
       this.world.add<Harvester>(e, C.Harvester, {
         state: "toNode",
         nodeId,
         dropId: 0,
         carrying: 0,
-        capacity: 8,
+        capacity: 12,
         timer: 0,
       });
     }
+  }
+
+  /** Worker/excavator units with no current task (idle). */
+  idleWorkers(): Entity[] {
+    return this.world.query(C.Unit).filter((e) => {
+      const u = this.world.get<Unit>(e, C.Unit)!;
+      if (!HARVEST_KINDS.has(u.kind)) return false;
+      return (
+        !this.world.has(e, C.Harvester) &&
+        !this.world.has(e, C.Builder) &&
+        !this.world.has(e, C.MegaBuilder) &&
+        !this.world.has(e, C.PathFollow)
+      );
+    });
   }
 
   /** Whether a building of `kind` fits at (x, z) without overlapping anything. */
@@ -658,6 +674,11 @@ export class GameSim {
       const u = this.world.get<Unit>(e, C.Unit)!;
       const s = this.world.get<Selectable>(e, C.Selectable);
       const h = this.world.get<Harvester>(e, C.Harvester);
+      let task: UnitSnapshot["task"] = "idle";
+      if (this.world.has(e, C.MegaBuilder)) task = "mega";
+      else if (this.world.has(e, C.Builder)) task = "build";
+      else if (h) task = "gather";
+      else if (this.world.has(e, C.PathFollow)) task = "move";
       out.push({
         id: e,
         x: t.x,
@@ -668,6 +689,7 @@ export class GameSim {
         selected: s?.selected ?? false,
         moving: this.world.has(e, C.PathFollow),
         carrying: h?.carrying ?? 0,
+        task,
       });
     }
     return out;
@@ -718,6 +740,7 @@ export interface UnitSnapshot {
   selected: boolean;
   moving: boolean;
   carrying: number;
+  task: "idle" | "move" | "gather" | "build" | "mega";
 }
 
 export interface BuildingSnapshot {

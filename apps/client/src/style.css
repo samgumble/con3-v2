@@ -62,6 +62,13 @@ body,
   font-variant-numeric: tabular-nums;
 }
 
+.hud-selection {
+  margin-bottom: 8px;
+  font-size: 13px;
+  color: #cdd6df;
+  font-weight: 600;
+}
+
 .hud-help {
   font-size: 12px;
   color: #8a97a5;

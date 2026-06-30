@@ -103,6 +103,7 @@ export class GameView {
   private readonly buildings = new Map<number, BuildingVisual>();
   private readonly nodes = new Map<number, NodeVisual>();
   private ghost: { group: THREE.Group; mats: THREE.MeshStandardMaterial[] } | null = null;
+  private readonly markers: { mesh: THREE.Mesh; age: number; ttl: number }[] = [];
 
   private readonly raycaster = new THREE.Raycaster();
   private readonly groundPlane = new THREE.Plane(new THREE.Vector3(0, 1, 0), 0);
@@ -383,6 +384,43 @@ export class GameView {
     this.ghost = null;
   }
 
+  /** Pulse an expanding ring on the ground to acknowledge an order. */
+  pingMarker(x: number, z: number, color: number): void {
+    const geo = new THREE.RingGeometry(0.45, 0.72, 24);
+    geo.rotateX(-Math.PI / 2);
+    const mesh = new THREE.Mesh(
+      geo,
+      new THREE.MeshBasicMaterial({
+        color,
+        transparent: true,
+        opacity: 0.95,
+        side: THREE.DoubleSide,
+        depthWrite: false,
+      }),
+    );
+    mesh.position.set(x, 0.06, z);
+    this.scene.add(mesh);
+    this.markers.push({ mesh, age: 0, ttl: 0.55 });
+  }
+
+  private updateMarkers(dt: number): void {
+    for (let i = this.markers.length - 1; i >= 0; i--) {
+      const m = this.markers[i];
+      m.age += dt;
+      const t = m.age / m.ttl;
+      if (t >= 1) {
+        this.scene.remove(m.mesh);
+        m.mesh.geometry.dispose();
+        (m.mesh.material as THREE.Material).dispose();
+        this.markers.splice(i, 1);
+        continue;
+      }
+      const s = 0.5 + t * 2.2;
+      m.mesh.scale.set(s, 1, s);
+      (m.mesh.material as THREE.MeshBasicMaterial).opacity = 0.95 * (1 - t);
+    }
+  }
+
   /** Create/update/remove deposit meshes; scale by remaining amount. */
   syncNodes(list: RenderNode[]): void {
     for (const v of this.nodes.values()) v.seen = false;
@@ -453,6 +491,7 @@ export class GameView {
     pointer?: { x: number; y: number; w: number; h: number },
   ): void {
     this.cameraCtl.update(dt, pointer);
+    this.updateMarkers(dt);
 
     const counters = new Map<string, number>();
     for (const kind of this.kindMeshes.keys()) counters.set(kind, 0);
